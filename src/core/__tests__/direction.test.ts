@@ -47,7 +47,7 @@ describe('reduceIndices / formatIndices', () => {
 
 describe('constraints', () => {
   it('leaves every bundled example unchanged (examples satisfy their own setting)', () => {
-    for (const s of CRYSTAL_SYSTEMS) expect(applyConstraints(s.id, s.cell)).toEqual(s.cell)
+    for (const s of CRYSTAL_SYSTEMS) expect(applyConstraints(s.systemId, s.cell)).toEqual(s.cell)
   })
 
   it('locks cubic b, c and all angles to follow a', () => {

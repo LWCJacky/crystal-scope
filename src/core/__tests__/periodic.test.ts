@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { generateCellEdges, generateImages, generateLatticePoints, wrapFraction, wrapPosition } from '../periodic'
+import type { Centering } from '../centering'
 import type { BasisAtom, RepeatSettings } from '../types'
+import { CRYSTAL_SYSTEMS } from '../../data/crystalSystems'
 
 const repeat = (n: number, showBoundaryImages = false): RepeatSettings => ({
   repeatA: n,
@@ -80,12 +82,59 @@ describe('generateImages', () => {
 })
 
 describe('lattice points and cell edges', () => {
-  it('generates (N+1)³ lattice points', () => {
-    expect(generateLatticePoints(repeat(2))).toHaveLength(27)
+  it('generates (N+1)³ lattice points including boundary images', () => {
+    expect(generateLatticePoints(repeat(2, true))).toHaveLength(27)
+    expect(generateLatticePoints(repeat(2)).filter((p) => !p.isBoundaryImage)).toHaveLength(8)
   })
 
   it('generates 12 edges for a single cell and 3·(N+1)² block-spanning lines for an N³ block', () => {
     expect(generateCellEdges(repeat(1))).toHaveLength(12)
     expect(generateCellEdges(repeat(2))).toHaveLength(3 * 9)
+  })
+})
+
+describe('centering', () => {
+  const origin: BasisAtom[] = [{ id: 'o', element: 'A', fractionalPosition: [0, 0, 0] }]
+  const inCell = (centering: Centering) =>
+    generateImages(origin, repeat(1, true), centering).filter((i) => !i.isBoundaryImage)
+
+  it('gives 1, 2, 2, 4 lattice points per cell for P, C, I, F', () => {
+    expect(inCell('P')).toHaveLength(1)
+    expect(inCell('C')).toHaveLength(2)
+    expect(inCell('I')).toHaveLength(2)
+    expect(inCell('F')).toHaveLength(4)
+  })
+
+  it('tags half-position points with their kind', () => {
+    const body = inCell('I').find((i) => i.kind === 'body')!
+    expect(body.fractionalPosition).toEqual([0.5, 0.5, 0.5])
+    expect(inCell('C').find((i) => i.kind === 'base')!.fractionalPosition).toEqual([0.5, 0.5, 0])
+    expect(inCell('F').filter((i) => i.kind === 'face')).toHaveLength(3)
+  })
+
+  it('shows all 6 face centres and 8 corners of an FCC cell with boundary images', () => {
+    const all = generateLatticePoints(repeat(1, true), 'F')
+    expect(all.filter((p) => p.kind === 'face')).toHaveLength(6)
+    expect(all.filter((p) => p.kind === 'corner')).toHaveLength(8)
+  })
+
+  it('keeps body centres inside the cell (no boundary images)', () => {
+    expect(generateLatticePoints(repeat(2, true), 'I').filter((p) => p.kind === 'body')).toHaveLength(8)
+  })
+})
+
+describe('Bravais lattices', () => {
+  it('lists exactly 14 types across the seven crystal systems', () => {
+    expect(CRYSTAL_SYSTEMS.flatMap((s) => s.lattices.map((l) => l.symbol))).toHaveLength(14)
+  })
+})
+
+describe('generateImages with margin (clip-to-cell)', () => {
+  it('includes one extra cell on every side and flags everything outside the block as boundary', () => {
+    const atoms: BasisAtom[] = [{ id: 'm', element: 'A', fractionalPosition: [0.3, 0.3, 0.3] }]
+    const images = generateImages(atoms, repeat(1), 'P', 1)
+    expect(images).toHaveLength(27)
+    expect(images.filter((i) => !i.isBoundaryImage)).toHaveLength(1)
+    expect(images.some((i) => i.offset[0] === -1)).toBe(true)
   })
 })

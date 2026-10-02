@@ -1,35 +1,71 @@
+/*
+ * CrystalScope 設計系統
+ * 深藏青底、細邊框卡片、各模組以單一色相做左緣與圖示點綴；
+ * 拉丁字與數字用圓潤幾何字體，中文標題用粗黑體。
+ */
 :root {
-  --bg: #f4f5f7;
+  /* 色票（淺色） */
+  --bg: #f5f6fa;
   --surface: #ffffff;
-  --text: #1d2330;
-  --muted: #667085;
-  --border: #dde1e8;
-  --accent: #3b6fd1;
-  --accent-soft: #e8effc;
+  --surface-2: #f0f2f7;
+  --border: #e2e5ee;
+  --border-strong: #cdd2de;
+  --text: #141821;
+  --text-2: #3a4252;
+  --muted: #6b7384;
+
+  /* 模組色相：每個區塊選一個，套用於左緣、圖示、小標 */
+  --violet: #6b5be6;
+  --mint: #1c9a6a;
+  --amber: #9c7418;
+  --sky: #2d7cc2;
+  --rose: #c8456d;
+
+  --accent: var(--violet);
+  /* 不支援 color-mix() 的舊瀏覽器（Chrome < 111、Safari < 16.2）退回這兩個固定的紫色調 */
+  --tint-bg: rgba(107, 91, 230, 0.14);
+  --tint-border: rgba(107, 91, 230, 0.55);
   --warn: #9a5b00;
-  --warn-soft: #fdf0d9;
+  --warn-soft: #fbf0dc;
+
+  --radius-card: 14px;
+  --radius-tile: 10px;
+  --radius-pill: 999px;
+
+  /* 動畫曲線：強 ease-out（進場）與強 ease-in-out（畫面上的移動） */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* 拉丁字與數字：Nunito（圓潤幾何）；中文：Noto Sans TC */
+  --font-sans: 'Nunito', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+
   color-scheme: light dark;
-  font-family:
-    system-ui,
-    -apple-system,
-    'PingFang TC',
-    'Noto Sans TC',
-    'Microsoft JhengHei',
-    sans-serif;
+  font-family: var(--font-sans);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12151b;
-    --surface: #1a1e26;
-    --text: #e4e7ee;
-    --muted: #9aa3b5;
-    --border: #2c323e;
-    --accent: #6f9bf0;
-    --accent-soft: #1f2b44;
+    --bg: #0a0d13;
+    --surface: #0e131b;
+    --surface-2: #141a24;
+    --border: #222a36;
+    --border-strong: #2f3846;
+    --text: #eceef3;
+    --text-2: #c3c9d4;
+    --muted: #8a93a3;
+
+    --violet: #a596ff;
+    --mint: #62d6a2;
+    --amber: #d9b46b;
+    --sky: #72b8f2;
+    --rose: #f08cab;
+
+    --tint-bg: rgba(165, 150, 255, 0.16);
+    --tint-border: rgba(165, 150, 255, 0.55);
     --warn: #f0b860;
-    --warn-soft: #3a2c14;
+    --warn-soft: #2e2412;
   }
 }
 
@@ -44,27 +80,58 @@ body {
   background: var(--bg);
 }
 
+h1,
+h2,
+h3 {
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* ── 按鈕：膠囊外框；選中為淡色調填色＋有色文字 ── */
 button {
   font: inherit;
-  font-size: 0.9rem;
-  color: inherit;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-2);
+  padding: 5px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
   cursor: pointer;
+  transition:
+    transform 160ms var(--ease-out),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
 }
-button:hover:not(:disabled) {
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  button:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+}
+/* 按下回饋：讓介面「聽見」使用者 */
+button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 button:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 button[aria-pressed='true'] {
+  background: var(--tint-bg);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--tint-border);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--accent);
+}
+button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--bg);
+}
+button.ghost {
+  border-color: transparent;
 }
 button:focus-visible,
 input:focus-visible {
@@ -72,14 +139,138 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+input[type='range'],
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+/* 分段切換：一組膠囊相連 */
+.segmented {
+  display: inline-flex;
+}
+.segmented button {
+  border-radius: 0;
+}
+.segmented button + button {
+  margin-left: -1px;
+}
+.segmented button:first-child {
+  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+}
+.segmented button:last-child {
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+}
+.segmented button[aria-pressed='true'] {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── 卡片：細邊框＋依模組色相的左緣（沿圓角彎曲） ── */
+.card {
+  --accent: var(--card-accent, var(--violet));
+  position: relative;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.card + .card {
+  margin-top: 12px;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.card-head h3 {
+  margin: 1px 0 0;
+  font-size: 0.98rem;
+  line-height: 1.3;
+}
+.card-head .en {
+  margin-left: 4px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* 帶色調的圖示方塊 */
+.icon-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--tint-border);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--tint-bg);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+.icon-tile svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* 字距寬、有色的小標，例如「模組 01」 */
+.eyebrow {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+
+/* 方形數字徽章，例如「01」 */
+.num-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-color: color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-radius: 8px;
+  color: var(--amber);
+  font-weight: 800;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 外框膠囊標籤（非互動） */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
 .panel-title {
   margin: 0 0 10px;
   font-size: 1rem;
 }
 
+/* 減少動態效果：各元件自行提供較溫和的版本（保留淡入淡出、移除位移），此處關閉平滑捲動與按壓縮放 */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-    animation: none !important;
+  html {
+    scroll-behavior: auto;
+  }
+  button:active:not(:disabled) {
+    transform: none;
   }
 }

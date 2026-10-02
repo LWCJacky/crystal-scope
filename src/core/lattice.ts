@@ -67,3 +67,33 @@ export function cartToFrac(basis: LatticeBasis, [px, py, pz]: Vec3): Vec3 {
   const x = (px - y * basis.b[0] - z * basis.c[0]) / basis.a[0]
   return [x, y, z]
 }
+
+export interface ClipPlane {
+  /** 單位法向量，指向保留側。 */
+  normal: Vec3
+  /** 保留 normal·r + constant ≥ 0 的區域（與 Three.js Plane 慣例一致）。 */
+  constant: number
+}
+
+function cross(p: Vec3, q: Vec3): Vec3 {
+  return [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]]
+}
+
+/**
+ * 分率座標區塊 0 ≤ x ≤ Na、0 ≤ y ≤ Nb、0 ≤ z ≤ Nc 的六個邊界面。
+ * 每個面的法向量沿倒晶格方向（例如 b⃗ × c⃗），非正交晶胞亦正確。
+ */
+export function cellClipPlanes(basis: LatticeBasis, counts: Vec3): ClipPlane[] {
+  const vectors = [basis.a, basis.b, basis.c]
+  const planes: ClipPlane[] = []
+  for (let i = 0; i < 3; i++) {
+    const n = cross(vectors[(i + 1) % 3], vectors[(i + 2) % 3])
+    const len = Math.hypot(...n)
+    const unit: Vec3 = [n[0] / len, n[1] / len, n[2] / len]
+    // a⃗ᵢ 在法向上的投影 = 相鄰兩面之間的距離
+    const spacing = unit[0] * vectors[i][0] + unit[1] * vectors[i][1] + unit[2] * vectors[i][2]
+    planes.push({ normal: unit, constant: 0 })
+    planes.push({ normal: [-unit[0], -unit[1], -unit[2]], constant: counts[i] * spacing })
+  }
+  return planes
+}

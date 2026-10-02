@@ -1,3 +1,4 @@
+import { centeringTranslations, type Centering } from './centering'
 import type { AtomImage, BasisAtom, RepeatSettings, Vec3 } from './types'
 
 /** 視為落在晶胞邊界上的容差。 */
@@ -22,31 +23,50 @@ export function clampRepeat(n: number): number {
 }
 
 /**
- * 依週期設定產生所有視覺複本：(x+i, y+j, z+k)，i ∈ [0, Na) …
- * 座標為 0 的原子另在 N 位置產生邊界複本（isBoundaryImage），僅供顯示、不計數。
+ * 依週期設定與心型產生所有視覺複本：(x+tx+i, y+ty+j, z+tz+k)，i ∈ [0, Na) …
+ * 其中 t 為心型平移（P 只有原點）。複本以 kind 標記來自哪一種晶格點。
+ * 座標為 0 的位置另在 N 產生邊界複本（isBoundaryImage），僅供顯示、不計數。
  */
-export function generateImages(atoms: readonly BasisAtom[], repeat: RepeatSettings): AtomImage[] {
+export function generateImages(
+  atoms: readonly BasisAtom[],
+  repeat: RepeatSettings,
+  centering: Centering = 'P',
+  /** 區塊外側額外包含的晶胞層數；供「裁切至晶胞」把從外側侵入的球體也納入裁切。 */
+  margin = 0,
+): AtomImage[] {
   const counts: Vec3 = [clampRepeat(repeat.repeatA), clampRepeat(repeat.repeatB), clampRepeat(repeat.repeatC)]
   const images: AtomImage[] = []
 
   for (const atom of atoms) {
-    const pos = wrapPosition(atom.fractionalPosition)
-    const ranges = pos.map((p, axis) => {
-      const n = counts[axis]
-      const offsets = Array.from({ length: n }, (_, i) => i)
-      if (repeat.showBoundaryImages && p === 0) offsets.push(n)
-      return offsets
-    })
+    for (const { vector: t, kind } of centeringTranslations(centering)) {
+      const f = atom.fractionalPosition
+      const pos = wrapPosition([f[0] + t[0], f[1] + t[1], f[2] + t[2]])
+      const ranges = pos.map((p, axis) => {
+        const n = counts[axis]
+        if (margin > 0) return Array.from({ length: n + 2 * margin }, (_, i) => i - margin)
+        const offsets = Array.from({ length: n }, (_, i) => i)
+        if (repeat.showBoundaryImages && p === 0) offsets.push(n)
+        return offsets
+      })
 
-    for (const i of ranges[0]) {
-      for (const j of ranges[1]) {
-        for (const k of ranges[2]) {
-          images.push({
-            baseId: atom.id,
-            offset: [i, j, k],
-            fractionalPosition: [pos[0] + i, pos[1] + j, pos[2] + k],
-            isBoundaryImage: i === counts[0] || j === counts[1] || k === counts[2],
-          })
+      for (const i of ranges[0]) {
+        for (const j of ranges[1]) {
+          for (const k of ranges[2]) {
+            const fractionalPosition: Vec3 = [pos[0] + i, pos[1] + j, pos[2] + k]
+            images.push({
+              baseId: atom.id,
+              kind,
+              offset: [i, j, k],
+              fractionalPosition,
+              // 此原子所關聯的晶格點 = 原子位置 − 基元內座標（折返後仍指向正確的晶格點）
+              latticePoint: [fractionalPosition[0] - f[0], fractionalPosition[1] - f[1], fractionalPosition[2] - f[2]],
+              isBoundaryImage:
+                i < 0 || j < 0 || k < 0 || i >= counts[0] || j >= counts[1] || k >= counts[2]
+                  ? // 邊界上（p = 0 且位於 N）的複本與區塊外的複本皆標為邊界複本
+                    true
+                  : false,
+            })
+          }
         }
       }
     }
@@ -54,12 +74,12 @@ export function generateImages(atoms: readonly BasisAtom[], repeat: RepeatSettin
   return images
 }
 
-/** 晶格點（與原子分開）：0…N 的整數組合，含外側邊界。 */
-export function generateLatticePoints(repeat: RepeatSettings): Vec3[] {
-  const points: Vec3[] = []
-  const [na, nb, nc] = [clampRepeat(repeat.repeatA), clampRepeat(repeat.repeatB), clampRepeat(repeat.repeatC)]
-  for (let i = 0; i <= na; i++) for (let j = 0; j <= nb; j++) for (let k = 0; k <= nc; k++) points.push([i, j, k])
-  return points
+/** 晶格點視圖用的虛擬基底：原點一個晶格點（晶格點不必然是原子）。 */
+export const LATTICE_POINT_ID = 'lattice-point'
+
+/** 晶格點（與原子分開）：原點晶格點經心型平移與週期複製，含外側邊界複本。 */
+export function generateLatticePoints(repeat: RepeatSettings, centering: Centering = 'P'): AtomImage[] {
+  return generateImages([{ id: LATTICE_POINT_ID, element: '', fractionalPosition: [0, 0, 0] }], repeat, centering)
 }
 
 /** 晶胞邊線端點對（分率座標），涵蓋整個 Na×Nb×Nc 區塊內所有晶胞邊。 */

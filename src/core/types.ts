@@ -1,3 +1,5 @@
+import type { LatticePointKind } from './centering'
+
 export type Vec3 = [number, number, number]
 
 /** 晶胞參數：長度為示意單位，角度為度。 */
@@ -24,6 +26,8 @@ export interface BasisAtom {
   /** 分率座標，儲存時正規化至 [0,1)。 */
   fractionalPosition: Vec3
   color?: string
+  /** 以符號表示的座標，例如 (0, y, ¼)；有內部參數時用於基元表。 */
+  positionLabel?: string
   /** 示意顯示半徑，非真實原子半徑。 */
   displayRadius?: number
 }
@@ -39,8 +43,12 @@ export interface RepeatSettings {
 /** 由基底原子衍生的視覺複本，不寫回儲存。 */
 export interface AtomImage {
   baseId: string
+  /** 此複本由哪一種晶格點平移而來（角落、底心、體心、面心）。 */
+  kind: LatticePointKind
   offset: Vec3
   fractionalPosition: Vec3
+  /** 此複本所關聯的晶格點（分率座標），用於顯示 Lattice point ↔ Motif 連線。 */
+  latticePoint: Vec3
   isBoundaryImage: boolean
 }
 

@@ -1,7 +1,9 @@
 {
   "name": "crystal-scope",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "license": "GPL-3.0-or-later",
+  "author": "LWCJacky",
   "type": "module",
   "scripts": {
     "dev": "vite",
