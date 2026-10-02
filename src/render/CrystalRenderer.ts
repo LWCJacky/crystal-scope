@@ -840,7 +840,7 @@ export class CrystalRenderer {
   /** 以 canvas 繪製的文字標籤，永遠面向相機且不被遮擋。 */
   private buildLabel({ text, position, color }: SceneLabel, size: number) {
     // 與介面相同的字體；網路字體尚未載入時退回系統襯線體（檢視區在 document.fonts.ready 後會重建）
-    const font = 'italic 700 92px Nunito, "Noto Sans TC", "Times New Roman", serif'
+    const font = 'italic 700 92px "Nunito Variable", "Noto Sans TC", "Times New Roman", serif'
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')!
     ctx.font = font

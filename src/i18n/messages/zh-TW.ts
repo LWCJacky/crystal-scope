@@ -120,7 +120,7 @@ export default {
   'about.runtime': '隨網站發布',
   'about.build': '開發與建置',
   'about.fonts': '字體',
-  'about.fontsNote': '經 Google Fonts 載入；離線時退回系統字體。',
+  'about.fontsNote': '字體經 Fontsource 套件隨網站打包，載入時不連任何外部服務。',
   'about.close': '關閉',
   'tour.language': '選擇語言 · Choose language · 言語を選択',
   'tour.languageNote': '專業名詞以英文為主；切換其他語言時會在旁邊附上英文原文。之後可隨時在頂部或設定中更改。',

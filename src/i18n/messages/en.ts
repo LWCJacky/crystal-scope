@@ -120,7 +120,7 @@ export default {
   'about.runtime': 'Shipped with the site',
   'about.build': 'Development and build',
   'about.fonts': 'Fonts',
-  'about.fontsNote': 'Loaded from Google Fonts; falls back to system fonts offline.',
+  'about.fontsNote': 'Fonts are bundled with the site via Fontsource packages; nothing is fetched from external services.',
   'about.close': 'Close',
   'tour.language': 'Choose language · 選擇語言 · 言語を選択',
   'tour.languageNote': 'Technical terms are given in English; other languages show the English original alongside. You can change the language any time from the header or settings.',

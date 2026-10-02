@@ -36,13 +36,18 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
-  /* 拉丁字與數字：Nunito（圓潤幾何）；中文：Noto Sans TC */
-  --font-sans: 'Nunito', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  /* 拉丁字與數字：Nunito（圓潤幾何，可變字重）；中文：Noto Sans TC。皆隨網站打包，無外部連線 */
+  --font-sans: 'Nunito Variable', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
 
   color-scheme: light dark;
   font-family: var(--font-sans);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+}
+
+/* 日文介面改用 Noto Sans JP（假名與日本漢字字形） */
+:root:lang(ja) {
+  --font-sans: 'Nunito Variable', 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {

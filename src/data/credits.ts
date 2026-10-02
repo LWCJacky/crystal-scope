@@ -30,6 +30,9 @@ const KNOWN: Record<string, { license: string; url: string; role: Dependency['ro
   '@vue/tsconfig': { license: 'MIT', url: 'https://github.com/vuejs/tsconfig', role: 'build' },
   '@types/three': { license: 'MIT', url: 'https://github.com/DefinitelyTyped/DefinitelyTyped', role: 'build' },
   '@types/node': { license: 'MIT', url: 'https://github.com/DefinitelyTyped/DefinitelyTyped', role: 'build' },
+  '@fontsource-variable/nunito': { license: 'MIT (套件) / OFL-1.1 (字體)', url: 'https://fontsource.org/fonts/nunito', role: 'runtime' },
+  '@fontsource/noto-sans-tc': { license: 'MIT (套件) / OFL-1.1 (字體)', url: 'https://fontsource.org/fonts/noto-sans-tc', role: 'runtime' },
+  '@fontsource/noto-sans-jp': { license: 'MIT (套件) / OFL-1.1 (字體)', url: 'https://fontsource.org/fonts/noto-sans-jp', role: 'runtime' },
 }
 
 /** 由建置時注入的 package.json 清單產生；未知套件以 npm 頁面與「見套件授權」標示。 */
@@ -43,7 +46,9 @@ export const DEPENDENCIES: Dependency[] = Object.entries(typeof __APP_DEPS__ ===
   }))
   .sort((p, q) => (p.role === q.role ? p.name.localeCompare(q.name) : p.role === 'runtime' ? -1 : 1))
 
+/** 字體經 Fontsource 套件隨網站打包，不連外部服務。 */
 export const FONTS = [
-  { name: 'Nunito', license: 'SIL OFL 1.1', url: 'https://fonts.google.com/specimen/Nunito' },
-  { name: 'Noto Sans TC', license: 'SIL OFL 1.1', url: 'https://fonts.google.com/noto/specimen/Noto+Sans+TC' },
+  { name: 'Nunito (variable)', license: 'SIL OFL 1.1', url: 'https://fontsource.org/fonts/nunito' },
+  { name: 'Noto Sans TC', license: 'SIL OFL 1.1', url: 'https://fontsource.org/fonts/noto-sans-tc' },
+  { name: 'Noto Sans JP', license: 'SIL OFL 1.1', url: 'https://fontsource.org/fonts/noto-sans-jp' },
 ] as const

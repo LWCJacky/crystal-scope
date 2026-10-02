@@ -41,7 +41,7 @@ GitHub Pages：<https://lwcjacky.com/crystal-scope/>（`lwcjacky.github.io/cryst
 
 | 資源 | 用途 | 授權 |
 | --- | --- | --- |
-| [Nunito](https://fonts.google.com/specimen/Nunito)、[Noto Sans TC](https://fonts.google.com/noto/specimen/Noto+Sans+TC) | 介面字體（經 Google Fonts 載入；離線時退回系統字體） | SIL Open Font License 1.1 |
+| [Nunito](https://fontsource.org/fonts/nunito)、[Noto Sans TC](https://fontsource.org/fonts/noto-sans-tc)、[Noto Sans JP](https://fontsource.org/fonts/noto-sans-jp) | 介面字體，經 Fontsource 套件隨網站打包（只含 woff2、Noto 僅 400／700 字重），不連外部服務 | SIL Open Font License 1.1（套件 MIT） |
 | [Three.js](https://threejs.org/) | 3D 渲染 | MIT |
 | [Vue](https://vuejs.org/)、[Pinia](https://pinia.vuejs.org/) | 介面與狀態管理 | MIT |
 
