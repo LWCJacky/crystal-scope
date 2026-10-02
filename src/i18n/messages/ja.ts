@@ -163,6 +163,7 @@ export default {
   'nav.demo': 'デモ',
   'nav.controls': '操作',
   'nav.close': 'パネルを閉じる',
+  'nav.more': 'その他',
   'kind.corner': '頂点',
   'kind.base': '底心',
   'kind.body': '体心',

@@ -3,6 +3,7 @@ import AnimationBar from './components/AnimationBar.vue'
 import AppHeader from './components/AppHeader.vue'
 import ControlPanel from './components/ControlPanel.vue'
 import GuideTour from './components/GuideTour.vue'
+import HeaderActions from './components/HeaderActions.vue'
 import ModuleIcon from './components/icons/ModuleIcon.vue'
 import SystemList from './components/SystemList.vue'
 import ViewportCanvas from './components/ViewportCanvas.vue'
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'examples', icon: 'crystal', key: 'nav.examples' },
   { id: 'demo', icon: 'play', key: 'nav.demo' },
   { id: 'controls', icon: 'param', key: 'nav.controls' },
+  { id: 'more', icon: 'more', key: 'nav.more' },
 ] as const
 
 function toggleSheet(id: (typeof TABS)[number]['id']) {
@@ -85,6 +87,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           <SystemList v-show="ui.sheet === 'examples'" class="panel" />
           <AnimationBar v-show="ui.sheet === 'demo'" class="sheet-bar" />
           <ControlPanel v-show="ui.sheet === 'controls'" class="panel" />
+          <HeaderActions v-show="ui.sheet === 'more'" stack />
         </div>
       </section>
       <nav class="tabbar area-bottom" :aria-label="t('header.mode')">
@@ -167,7 +170,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 }
 .tabbar {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   box-sizing: border-box;
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border);

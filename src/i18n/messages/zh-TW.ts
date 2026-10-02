@@ -163,6 +163,7 @@ export default {
   'nav.demo': '演示',
   'nav.controls': '控制',
   'nav.close': '收合面板',
+  'nav.more': '更多',
   'kind.corner': '角落',
   'kind.base': '底心',
   'kind.body': '體心',

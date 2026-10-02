@@ -15,10 +15,11 @@ const { t, locale } = useI18n()
 const isMobile = useMediaQuery(MOBILE_QUERY)
 
 /** 手機版：導覽目標位於哪個底部面板（不在面板裡的目標則收合面板）。 */
-function sheetFor(target?: string): 'examples' | 'demo' | 'controls' | null {
+function sheetFor(target?: string): 'examples' | 'demo' | 'controls' | 'more' | null {
   if (!target) return null
   if (target.includes('system-list')) return 'examples'
   if (target.includes('animation-bar') || target.includes('ladder')) return 'demo'
+  if (target.includes('data-tour="language"') || target.includes('data-tour="settings"') || target.includes('data-tour="about"') || target.includes('data-tour="help"')) return 'more'
   if (target.includes('data-tour="composition"') || target.includes('data-tour="lattice"') || target.includes('data-tour="spheres"') || target.includes('data-tour="hex"')) return 'controls'
   return null
 }

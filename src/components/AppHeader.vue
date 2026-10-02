@@ -1,25 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useStructureStore } from '../stores/structure'
+import { MOBILE_QUERY, useMediaQuery } from '../composables/useMediaQuery'
 import { useUiStore } from '../stores/ui'
+import HeaderActions from './HeaderActions.vue'
 import ModuleIcon from './icons/ModuleIcon.vue'
-import SettingsDialog from './SettingsDialog.vue'
-import AboutDialog from './AboutDialog.vue'
 import { useI18n } from '../i18n'
-import { LOCALES } from '../i18n/types'
-import { useSettingsStore } from '../stores/settings'
 
-const structure = useStructureStore()
 const ui = useUiStore()
-const settings = useSettingsStore()
 const { t } = useI18n()
-const settingsDialog = ref<InstanceType<typeof SettingsDialog>>()
-const aboutDialog = ref<InstanceType<typeof AboutDialog>>()
-
-function reset() {
-  structure.resetExample()
-  ui.requestViewReset()
-}
+/** 手機：動作列移到底部「更多」面板，標題列只留品牌與「說明」。 */
+const isMobile = useMediaQuery(MOBILE_QUERY)
 </script>
 
 <template>
@@ -31,34 +20,8 @@ function reset() {
         <p class="sub">{{ t('app.subtitle') }}</p>
       </div>
     </div>
-    <nav class="actions">
-      <div class="segmented" role="group" :aria-label="t('header.mode')">
-        <button :aria-pressed="ui.mode === 'explore'" @click="ui.mode = 'explore'">{{ t('header.explore') }}</button>
-        <button :aria-pressed="ui.mode === 'presentation'" @click="ui.mode = 'presentation'">{{ t('header.presentation') }}</button>
-      </div>
-      <span class="divider" aria-hidden="true" />
-      <button class="ghost" :disabled="!structure.canUndo" :title="`${t('header.undo')} (Undo)`" @click="structure.undo()">{{ t('header.undo') }}</button>
-      <button class="ghost" :disabled="!structure.canRedo" :title="`${t('header.redo')} (Redo)`" @click="structure.redo()">{{ t('header.redo') }}</button>
-      <button :title="t('header.resetTitle')" @click="reset">{{ t('header.reset') }}</button>
-      <span class="divider" aria-hidden="true" />
-      <div class="segmented" role="group" :aria-label="t('header.language')" data-tour="language">
-        <button
-          v-for="l in LOCALES"
-          :key="l.id"
-          :lang="l.htmlLang"
-          :aria-pressed="settings.values.locale === l.id"
-          @click="settings.values.locale = l.id"
-        >
-          {{ l.label }}
-        </button>
-      </div>
-      <span class="divider" aria-hidden="true" />
-      <button data-tour="settings" :title="t('header.settingsTitle')" @click="settingsDialog?.open()">{{ t('header.settings') }}</button>
-      <button data-tour="about" :title="t('header.aboutTitle')" @click="aboutDialog?.open()">{{ t('header.about') }}</button>
-      <button data-tour="help" class="primary" :title="t('header.helpTitle')" @click="ui.openTour()">{{ t('header.help') }}</button>
-    </nav>
-    <SettingsDialog ref="settingsDialog" />
-    <AboutDialog ref="aboutDialog" />
+    <HeaderActions v-if="!isMobile" />
+    <button v-else class="primary help" :title="t('header.helpTitle')" @click="ui.openTour()">{{ t('header.help') }}</button>
   </header>
 </template>
 
@@ -96,24 +59,10 @@ function reset() {
   letter-spacing: 0.14em;
   color: var(--muted);
 }
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+.help {
+  flex: none;
 }
-@media (max-width: 640px) {
-  .divider {
-    display: none;
-  }
-}
-.divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 4px;
-  background: var(--border);
-}
-/* 手機：單列，動作列可橫向滑動（瀏覽器保留直向捲動） */
+/* 手機：單列、精簡 */
 @media (max-width: 860px) {
   .app-header {
     flex-wrap: nowrap;
@@ -123,28 +72,10 @@ function reset() {
   }
   .brand {
     gap: 8px;
-    flex: none;
+    min-width: 0;
   }
   .sub {
     display: none;
-  }
-  .actions {
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    touch-action: pan-x;
-    padding-bottom: 2px;
-    /* 右緣淡出：提示還有更多按鈕可以滑 */
-    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-  }
-  .actions::-webkit-scrollbar {
-    display: none;
-  }
-  .actions > * {
-    flex: none;
   }
 }
 </style>

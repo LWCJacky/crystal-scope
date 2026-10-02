@@ -163,6 +163,7 @@ export default {
   'nav.demo': 'Demo',
   'nav.controls': 'Controls',
   'nav.close': 'Close panel',
+  'nav.more': 'More',
   'kind.corner': 'Corner',
   'kind.base': 'Base centre',
   'kind.body': 'Body centre',

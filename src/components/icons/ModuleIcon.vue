@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 各模組的線條圖示（自繪，24×24 網格、1.8 線寬）。 */
-defineProps<{ name: 'motif' | 'lattice' | 'sphere' | 'hex' | 'param' | 'cell' | 'repeat' | 'atom' | 'direction' | 'display' | 'play' | 'crystal' }>()
+defineProps<{ name: 'motif' | 'lattice' | 'sphere' | 'hex' | 'param' | 'cell' | 'repeat' | 'atom' | 'direction' | 'display' | 'play' | 'more' | 'crystal' }>()
 </script>
 
 <template>
@@ -62,6 +62,12 @@ defineProps<{ name: 'motif' | 'lattice' | 'sphere' | 'hex' | 'param' | 'cell' | 
     <!-- 播放 -->
     <template v-else-if="name === 'play'">
       <path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none" />
+    </template>
+    <!-- 更多：三點 -->
+    <template v-else-if="name === 'more'">
+      <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
     </template>
     <!-- 標誌：晶體 -->
     <template v-else>
