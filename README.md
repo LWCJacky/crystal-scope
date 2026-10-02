@@ -14,6 +14,12 @@ npm run build   # 型別檢查 + 靜態建置
 BASE_PATH=/crystal-scope/ npm run build   # GitHub Pages 子路徑
 ```
 
+## 線上版本
+
+GitHub Pages：<https://lwcjacky.github.io/crystal-scope/>
+
+推送到 `main` 分支會觸發 `.github/workflows/deploy.yml`：安裝相依、跑測試、以 `BASE_PATH=/crystal-scope/` 建置，再部署到 GitHub Pages（首次執行會自動啟用 Pages）。也可在 Actions 頁面手動觸發（workflow_dispatch）。
+
 ## 架構
 
 | 目錄 | 責任 |
