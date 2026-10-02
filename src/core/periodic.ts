@@ -33,6 +33,11 @@ function countOf(n: number): number {
  * 其中 t 為心型平移（P 只有原點）。複本以 kind 標記來自哪一種晶格點。
  * 座標為 0 的位置另在 N 產生邊界複本（isBoundaryImage），僅供顯示、不計數。
  */
+/** 複本在「自己那個晶胞」內的分率座標（扣除整數晶胞偏移），即資訊卡顯示的晶胞內座標。 */
+export function imageCellPosition(img: AtomImage): Vec3 {
+  return img.fractionalPosition.map((v, i) => v - img.offset[i]) as Vec3
+}
+
 export function generateImages(
   atoms: readonly BasisAtom[],
   repeat: RepeatSettings,

@@ -38,12 +38,18 @@ const title = computed(() =>
 const rows = computed(() => {
   const info = props.info
   if (!info) return []
+  // FIX-01：晶胞內座標、原始基元座標（符號式只作附註）、晶胞偏移、全域座標分開列出
   const list: { dt: string; dd: string; mono?: boolean; dot?: string }[] = [
-    { dt: t('card.frac'), dd: info.positionLabel ?? formatPosition(info.frac), mono: true },
+    { dt: t('card.frac'), dd: formatPosition(info.frac), mono: true },
+  ]
+  if (info.basisFrac) list.push({ dt: t('card.basisFrac'), dd: `${formatPosition(info.basisFrac)}${info.basisLabel ? `　${info.basisLabel}` : ''}`, mono: true })
+  list.push(
     { dt: t('card.point'), dd: `${kindName.value} ${kindPos.value}`, dot: kind.value?.color },
     { dt: t('card.offset'), dd: formatPosition(info.cellOffset), mono: true },
-  ]
-  if (info.kind === 'atom') list.push({ dt: t('card.bonds'), dd: info.bondCount ? t('card.bondCount', { n: info.bondCount }) : t('card.bondUndefined') })
+    { dt: t('card.globalFrac'), dd: formatPosition(info.globalFrac), mono: true },
+  )
+  // FIX-02：noRule（未定義規則）與 computed（依規則計算，可為 0）要能區別
+  if (info.kind === 'atom') list.push({ dt: t('card.bonds'), dd: info.bondStatus === 'noRule' ? t('card.bondUndefined') : t('card.bondCount', { n: info.bondCount }) })
   return list
 })
 

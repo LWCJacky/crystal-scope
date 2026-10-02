@@ -8,11 +8,11 @@ import { cubeHabit, parallelepipedHabit, polyhedronExtent, type Polyhedron } fro
 import { angleArc, hexagonalAxes, hexagonalHabit, hexPrismEdges } from '../core/hexagonal'
 import { cellClipPlanes, fracToCart } from '../core/lattice'
 import { findBonds } from '../core/neighbors'
-import { generateCellEdges, generateImages, generateLatticePoints, LATTICE_POINT_ID } from '../core/periodic'
+import { LATTICE_POINT_ID, generateCellEdges, generateImages, generateLatticePoints, imageCellPosition } from '../core/periodic'
 import { centeringTranslations } from '../core/centering'
 import { wrapPosition } from '../core/periodic'
 import { BLOCK_CELLS, formatLength, ladderSeconds, ladderState, ROD_METRES_PER_UNIT, scaleBar, zoomAtTime, type LadderProfile } from '../core/scaleLadder'
-import type { AtomImage, RepeatSettings, Vec3 } from '../core/types'
+import type { BasisAtom, AtomImage, RepeatSettings, Vec3 } from '../core/types'
 import { elementStyle } from '../data/elements'
 import { LATTICE_POINT_KINDS } from '../data/latticePointKinds'
 import type { LatticeSurfaceSpec } from '../render/latticeSurface'
@@ -114,11 +114,13 @@ function buildScene(over?: SceneOverrides): SceneData {
     element: '',
     elementZh: '',
     // 與原子一致：顯示晶胞內的位置（扣除晶胞偏移）
-    frac: img.fractionalPosition.map((v, i) => v - img.offset[i]) as Vec3,
+    frac: imageCellPosition(img),
     cellOffset: img.offset,
+    globalFrac: img.fractionalPosition,
     pointKind: img.kind,
     isBoundaryImage: img.isBoundaryImage,
     motifIndex: 0,
+    bondStatus: 'noRule',
     bondCount: 0,
     note: t('info.latticePointNote', {
       kind: kindName(img),
@@ -127,7 +129,8 @@ function buildScene(over?: SceneOverrides): SceneData {
       n: structure.basis.length,
     }),
   })
-  const atomInfo = (img: AtomImage, atom: { id: string; element: string; positionLabel?: string }): AtomInfo => {
+  const bondRules = example.bonds ?? []
+  const atomInfo = (img: AtomImage, atom: BasisAtom): AtomInfo => {
     const index = structure.basis.findIndex((b) => b.id === atom.id) + 1
     const style = elementStyle(atom.element)
     const boundary = img.isBoundaryImage ? ` ${t('info.boundaryNote')}` : ''
@@ -135,12 +138,16 @@ function buildScene(over?: SceneOverrides): SceneData {
       kind: 'atom',
       element: atom.element,
       elementZh: l(style.name),
-      frac: img.fractionalPosition.map((v, i) => v - img.offset[i]) as Vec3,
+      // FIX-01：數值一律取平移後的實際座標；基元符號式只作附註
+      frac: imageCellPosition(img),
+      basisFrac: atom.fractionalPosition,
+      basisLabel: atom.positionLabel,
       cellOffset: img.offset,
+      globalFrac: img.fractionalPosition,
       pointKind: img.kind,
       isBoundaryImage: img.isBoundaryImage,
       motifIndex: index,
-      positionLabel: atom.positionLabel,
+      bondStatus: bondRules.length ? 'computed' : 'noRule',
       bondCount: 0,
       note: `${t('info.atomNote', { n: index, kind: kindName(img) })}${boundary}`,
     }
@@ -209,15 +216,17 @@ function buildScene(over?: SceneOverrides): SceneData {
     if (showAssociation) atoms.push(...latticePoints.map((img) => latticePointAtom(img, false)))
   }
 
-  const rules = ui.showBonds && !contact ? (example.bonds ?? []) : []
-  const bondPairs = findBonds(bondCandidates, rules)
+  // FIX-02：鄰近分析與是否繪製分離——資訊卡的連線數不隨「顯示連線」開關改變
+  const bondPairs = findBonds(bondCandidates, bondRules)
   // 每顆原子的鍵數（bondCandidates 與 atoms 中的原子依序對應，晶格點不在其中）
   const atomsWithBonds = atoms.filter((a) => a.info?.kind === 'atom')
   for (const [i, j] of bondPairs) {
     if (atomsWithBonds[i]?.info) atomsWithBonds[i].info!.bondCount++
     if (atomsWithBonds[j]?.info) atomsWithBonds[j].info!.bondCount++
   }
-  const bonds = bondPairs.map(([i, j]) => [bondCandidates[i].position, bondCandidates[j].position] as [Vec3, Vec3])
+  // 硬球接觸模型下球體相接，不另畫連線
+  const drawBonds = ui.showBonds && !contact
+  const bonds = drawBonds ? bondPairs.map(([i, j]) => [bondCandidates[i].position, bondCandidates[j].position] as [Vec3, Vec3]) : []
 
   let arrow: SceneData['arrow'] = null
   const d = structure.direction

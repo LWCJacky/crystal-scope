@@ -1,5 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, toRaw } from 'vue'
+import { copyStructure, createDraftMeta, type DraftMeta } from '../core/draft'
 import { cellToBasis, fracToCart, validateCell } from '../core/lattice'
 import { generatePrismImages, generatePrismLatticePoints } from '../core/hexagonal'
 import { nearestNeighborDistance } from '../core/neighbors'
@@ -16,12 +17,25 @@ interface Snapshot {
   cell: CellParams
   basis: BasisAtom[]
   params: MotifParams
-  isCustom: boolean
+}
+
+/**
+ * 工作模式：learn（教學）載入正式範例且唯讀；design（設計）編輯由範例深複製而來的草稿。
+ * 與顯示版面（ui.mode：探索／投影）及視圖（晶格點／基元／結構）互相獨立。
+ */
+export type Workspace = 'learn' | 'design'
+
+/** 離開設計模式時暫存的草稿，切回時還原（第一版只保留一份、不落地）。 */
+interface StashedDraft extends Snapshot {
+  exampleId: string
+  latticeSymbol: string
+  draft: DraftMeta
 }
 
 const HISTORY_LIMIT = 100
 
-const clone = <T>(v: T): T => structuredClone(v)
+/** 深複製；先 toRaw 去掉 Vue 的響應式代理，否則 structuredClone 會丟出 DataCloneError。 */
+const clone = <T>(v: T): T => structuredClone(toRaw(v))
 
 export const useStructureStore = defineStore('structure', () => {
   const initial = findExample(DEFAULT_EXAMPLE)
@@ -34,8 +48,14 @@ export const useStructureStore = defineStore('structure', () => {
   const params = ref<MotifParams>(defaultParams(initial))
   /** 所選布拉菲晶格的皮爾遜符號，例如 cF。 */
   const latticeSymbol = ref(initial.lattices[0].symbol)
-  /** 編輯後為 true：不再宣稱屬於來源晶系，只保留來源範例名稱。 */
-  const isCustom = ref(false)
+  const workspace = ref<Workspace>('learn')
+  /** 設計模式的草稿中繼資料；教學模式為 null。 */
+  const draft = ref<DraftMeta | null>(null)
+  let stashed: StashedDraft | null = null
+  /** 只有設計模式可修改結構；教學模式的正式資料唯讀。 */
+  const editable = computed(() => workspace.value === 'design')
+  /** 設計草稿一律視為自訂、未驗證結構，即使尚未修改。 */
+  const isCustom = computed(() => workspace.value === 'design')
 
   const settings = useSettingsStore().values
   // 「邊界複本」為共用設定：以存取器直接讀寫 settings，只有一份真實來源
@@ -86,15 +106,19 @@ export const useStructureStore = defineStore('structure', () => {
   const selectedAtom = computed(() => basis.value.find((a) => a.id === selectedAtomId.value) ?? null)
 
   function snapshot(): Snapshot {
-    return { cell: clone(cell.value), basis: clone(basis.value), params: clone(params.value), isCustom: isCustom.value }
+    return { cell: clone(cell.value), basis: clone(basis.value), params: clone(params.value) }
   }
 
   function restore(s: Snapshot) {
     cell.value = clone(s.cell)
     basis.value = clone(s.basis)
     params.value = clone(s.params)
-    isCustom.value = s.isCustom
     if (!basis.value.some((a) => a.id === selectedAtomId.value)) selectedAtomId.value = null
+  }
+
+  function clearHistory() {
+    past.value = []
+    future.value = []
   }
 
   /** 在修改結構前呼叫，記錄一步歷史。 */
@@ -104,21 +128,61 @@ export const useStructureStore = defineStore('structure', () => {
     future.value = []
   }
 
+  /** 載入範例：教學模式顯示正式資料；設計模式則以該範例建立新草稿（取代目前草稿）。 */
   function loadExample(id: string) {
     exampleId.value = id
     latticeSymbol.value = findExample(id).lattices[0].symbol
     resetExample()
-    past.value = []
-    future.value = []
+    clearHistory()
+    if (workspace.value === 'design') draft.value = createDraftMeta(id, __APP_VERSION__)
   }
 
+  /** 還原為來源範例的正式資料（設計模式：草稿內容重設，草稿身分保留）。 */
   function resetExample() {
     const s = source.value
-    cell.value = clone(s.cell)
-    params.value = defaultParams(s)
-    basis.value = buildMotif(s, params.value)
-    isCustom.value = false
+    const p = defaultParams(s)
+    const copy = copyStructure(s.cell, buildMotif(s, p), p)
+    cell.value = copy.cell
+    params.value = copy.params
+    basis.value = copy.basis
     selectedAtomId.value = null
+  }
+
+  /** 複製到設計模式：以目前範例深複製建立草稿；之後的修改都不回寫教學資料。 */
+  function copyToDesign() {
+    stashed = null
+    draft.value = createDraftMeta(exampleId.value, __APP_VERSION__)
+    workspace.value = 'design'
+    resetExample()
+    clearHistory()
+  }
+
+  /** 切換工作模式：回教學模式時暫存草稿並重新載入正式資料；回設計模式時還原草稿，沒有草稿則複製目前範例。 */
+  function setWorkspace(next: Workspace) {
+    if (next === workspace.value) return
+    if (next === 'learn') {
+      if (draft.value) stashed = { ...snapshot(), exampleId: exampleId.value, latticeSymbol: latticeSymbol.value, draft: draft.value }
+      draft.value = null
+      workspace.value = 'learn'
+      resetExample()
+      clearHistory()
+      return
+    }
+    if (!stashed) {
+      copyToDesign()
+      return
+    }
+    exampleId.value = stashed.exampleId
+    latticeSymbol.value = stashed.latticeSymbol
+    restore(stashed)
+    draft.value = stashed.draft
+    stashed = null
+    workspace.value = 'design'
+    clearHistory()
+  }
+
+  function setDraftTitle(title: string) {
+    if (draft.value) draft.value = { ...draft.value, title: title.trim() || null }
   }
 
   /**
@@ -126,29 +190,29 @@ export const useStructureStore = defineStore('structure', () => {
    * finalize=false 用於拖曳過程（連續、不折返）；finalize=true 時正規化至 [0,1)。
    */
   function setAtomPosition(id: string, position: Vec3, finalize = true) {
+    if (!editable.value) return
     const atom = basis.value.find((a) => a.id === id)
     if (!atom) return
     atom.fractionalPosition = finalize ? wrapPosition(position) : position
-    isCustom.value = true
   }
 
   /** 套用晶胞參數；無效則不套用並回傳原因。分率座標保持不變，原子隨晶胞變形。 */
   function setCell(next: CellParams): string | null {
+    if (!editable.value) return 'read-only'
     const result = validateCell(next)
     if (!result.valid) return result.reason
     commit()
     cell.value = clone(next)
-    isCustom.value = true
     return null
   }
 
-  /** 修改基元內部參數並重建基元；偏離參考值時標示為自訂。呼叫端負責在拖動開始時 commit()。 */
+  /** 修改基元內部參數並重建基元（只限設計模式）。呼叫端負責在拖動開始時 commit()。 */
   function setParam(key: string, value: number) {
+    if (!editable.value) return
     const def = source.value.parameters?.find((p) => p.key === key)
     if (!def) return
     params.value = { ...params.value, [key]: Math.min(def.max, Math.max(def.min, value)) }
     basis.value = buildMotif(source.value, params.value)
-    isCustom.value = source.value.parameters!.some((p) => params.value[p.key] !== p.default)
   }
 
   /** 切換同一晶系內的布拉菲晶格（P／C／I／F），基底原子不變。 */
@@ -181,6 +245,9 @@ export const useStructureStore = defineStore('structure', () => {
     basis,
     params,
     latticeSymbol,
+    workspace,
+    draft,
+    editable,
     isCustom,
     repeat,
     direction,
@@ -202,6 +269,9 @@ export const useStructureStore = defineStore('structure', () => {
     commit,
     loadExample,
     resetExample,
+    copyToDesign,
+    setWorkspace,
+    setDraftTitle,
     setAtomPosition,
     setCell,
     setLattice,

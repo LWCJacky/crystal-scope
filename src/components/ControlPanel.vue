@@ -52,6 +52,16 @@ const bondRuleText = computed(() =>
 const hexPrismOn = computed(() => ui.hexPrism && ui.viewMode !== 'motif')
 
 const showHex = computed(() => structure.systemId === 'hexagonal')
+/** FIX-03：六方柱生成器底面固定 3 個晶胞、只用 Nc，且不支援邊界複本與裁切；對應控制停用並說明。 */
+const prismLocks = computed(() => showHex.value && hexPrismOn.value)
+const design = computed(() => structure.workspace === 'design')
+const draftTitle = computed(() => structure.draft?.title ?? t('panel.draftTitle'))
+const draftFrom = computed(() => {
+  const p = structure.draft?.provenance
+  if (!p) return ''
+  const time = new Date(p.copiedAt).toLocaleString(locale.value === 'zh-TW' ? 'zh-TW' : locale.value, { hour12: false })
+  return t('panel.draftFrom', { name: l(structure.source.name), time })
+})
 const showParams = computed(() => !!structure.source.parameters?.length)
 
 /** 模組編號依目前可見的卡片連續排序，隱藏的模組不佔號。 */
@@ -94,7 +104,32 @@ const AXES = [
 
 <template>
   <aside class="control-panel" :aria-label="t('panel.aria')">
-    <section class="hero">
+    <!-- 設計模式：草稿是有效資料，來源說明只作追溯（FIX-04） -->
+    <section v-if="design" class="hero">
+      <p class="eyebrow">{{ t('panel.heroDraft') }}</p>
+      <h2 class="hero-title">{{ draftTitle }}</h2>
+      <div class="hero-chips">
+        <span class="chip symbol-chip">{{ structure.lattice.symbol }}</span>
+      </div>
+      <p class="badge">{{ t('panel.custom') }}</p>
+      <p v-if="draftFrom" class="note">{{ draftFrom }}</p>
+      <details class="source-ref">
+        <summary>{{ t('panel.sourceRef') }}</summary>
+        <p class="note">{{ t('panel.sourceRefNote') }}</p>
+        <dl class="meta">
+          <dt>{{ t('panel.sourceName') }}</dt>
+          <dd>{{ l(structure.source.name) }} · {{ structure.source.nameEn }}</dd>
+          <dt>{{ t('panel.cellSetting') }}</dt>
+          <dd>{{ l(structure.source.cellSetting) }}</dd>
+          <dt>{{ t('panel.relations') }}</dt>
+          <dd>{{ l(structure.source.relations) }}</dd>
+        </dl>
+        <p class="desc">{{ l(structure.source.description) }}</p>
+        <p v-if="structure.source.reference" class="note">{{ l(structure.source.reference) }}</p>
+      </details>
+    </section>
+    <!-- 教學模式：正式範例，唯讀 -->
+    <section v-else class="hero">
       <p class="eyebrow">{{ structure.source.group === 'system' ? t('panel.heroSystem') : t('panel.heroMaterial') }}</p>
       <h2 class="hero-title">
         {{ structure.source.group === 'system' ? t('panel.systemTitle', { name: l(structure.source.name) }) : l(structure.source.name) }}
@@ -103,7 +138,6 @@ const AXES = [
         <span class="chip">{{ structure.source.nameEn }}</span>
         <span class="chip symbol-chip">{{ structure.lattice.symbol }}</span>
       </div>
-      <p v-if="structure.isCustom" class="badge">{{ t('panel.custom', { name: l(structure.source.name) }) }}</p>
       <dl class="meta">
         <dt>{{ t('panel.cellSetting') }}</dt>
         <dd>{{ l(structure.source.cellSetting) }}</dd>
@@ -112,6 +146,7 @@ const AXES = [
       </dl>
       <p class="desc">{{ l(structure.source.description) }}</p>
       <p v-if="structure.source.reference" class="note">{{ l(structure.source.reference) }}</p>
+      <button class="copy-btn" :title="t('panel.copyToDesignTitle')" @click="structure.copyToDesign()">{{ t('panel.copyToDesign') }}</button>
     </section>
 
     <PanelCard data-tour="composition" :index="num('composition')" term="composition" icon="motif" accent="violet">
@@ -191,7 +226,9 @@ const AXES = [
     <PanelCard v-if="showParams" :index="num('params')" term="motifParams" icon="param" accent="sky">
       <div v-for="p in structure.source.parameters" :key="p.key" class="param-row">
         <label :for="`param-${p.key}`"><i>{{ p.key }}</i></label>
+        <!-- 教學模式唯讀：只顯示參考值；要拖動請複製到設計模式 -->
         <input
+          v-if="design"
           :id="`param-${p.key}`"
           type="range"
           :min="p.min"
@@ -200,9 +237,11 @@ const AXES = [
           :value="structure.params[p.key]"
           @input="onParamInput(p.key, +($event.target as HTMLInputElement).value)"
         />
+        <span v-else :id="`param-${p.key}`" class="param-ref">{{ t('panel.paramRef', { value: p.default.toFixed(4) }) }}</span>
         <output>{{ structure.params[p.key].toFixed(4) }}</output>
         <p class="note full">{{ l(p.note) }}</p>
       </div>
+      <p v-if="!design" class="note">{{ t('panel.readonly') }}</p>
     </PanelCard>
 
     <PanelCard data-tour="spheres" :index="num('spheres')" term="spheresBonds" icon="sphere" accent="amber">
@@ -225,8 +264,8 @@ const AXES = [
       <label v-if="structure.source.bonds?.length" class="check">
         <input v-model="ui.showBonds" type="checkbox" /> {{ t('panel.bonds', { rules: bondRuleText }) }}
       </label>
-      <label class="check" :class="{ disabled: ui.viewMode !== 'structure' }">
-        <input v-model="ui.clipToCell" type="checkbox" :disabled="ui.viewMode !== 'structure'" /> {{ t('panel.clip') }}
+      <label class="check" :class="{ disabled: ui.viewMode !== 'structure' || prismLocks }">
+        <input v-model="ui.clipToCell" type="checkbox" :disabled="ui.viewMode !== 'structure' || prismLocks" /> {{ t('panel.clip') }}
       </label>
       <p class="note">{{ t('panel.sphereNote') }}</p>
     </PanelCard>
@@ -238,11 +277,11 @@ const AXES = [
           <td>{{ v }}</td>
         </tr>
       </table>
-      <p class="todo">{{ t('panel.cellTodo') }}</p>
+      <p class="todo">{{ design ? t('panel.designTodo') : t('panel.readonly') }}</p>
     </PanelCard>
 
     <PanelCard :index="num('repeat')" term="repeat" icon="repeat" accent="mint">
-      <div v-for="[key, label] in AXES" :key="key" class="repeat-row">
+      <div v-for="[key, label] in AXES" :key="key" class="repeat-row" :class="{ disabled: prismLocks && key !== 'repeatC' }">
         <label :for="key">{{ label }}</label>
         <input
           :id="key"
@@ -250,6 +289,7 @@ const AXES = [
           min="1"
           max="5"
           :value="structure.repeat[key]"
+          :disabled="prismLocks && key !== 'repeatC'"
           @input="structure.setRepeat({ [key]: +($event.target as HTMLInputElement).value })"
         />
         <output>{{ structure.repeat[key] }}</output>
@@ -258,15 +298,18 @@ const AXES = [
         <button
           v-for="n in PRESETS"
           :key="n"
+          :disabled="prismLocks"
           @click="structure.setRepeat({ repeatA: n, repeatB: n, repeatC: n })"
         >
           {{ n }}×{{ n }}×{{ n }}
         </button>
       </div>
+      <p v-if="prismLocks" class="note">{{ t('panel.prismLocks', { n: 3 * structure.repeat.repeatC }) }}</p>
+      <p v-else class="note">{{ t('panel.cellCount', { n: structure.repeat.repeatA * structure.repeat.repeatB * structure.repeat.repeatC }) }}</p>
     </PanelCard>
 
     <PanelCard :index="num('atom')" term="atomPosition" icon="atom" accent="violet">
-      <p class="todo">{{ t('panel.atomTodo') }}</p>
+      <p class="todo">{{ design ? t('panel.designTodo') : t('panel.readonly') }}</p>
     </PanelCard>
 
     <PanelCard :index="num('direction')" term="direction" icon="direction" accent="rose">
@@ -279,7 +322,9 @@ const AXES = [
       <label class="check" :class="{ disabled: !ui.showAxes }">
         <input v-model="ui.showAngles" type="checkbox" :disabled="!ui.showAxes" /> {{ t('panel.angles') }}
       </label>
-      <label class="check"><input v-model="structure.repeat.showBoundaryImages" type="checkbox" /> {{ t('panel.boundary') }}</label>
+      <label class="check" :class="{ disabled: prismLocks }">
+        <input v-model="structure.repeat.showBoundaryImages" type="checkbox" :disabled="prismLocks" /> {{ t('panel.boundary') }}
+      </label>
       <div class="row-inline">
         <span>{{ t('panel.projection') }}</span>
         <div class="segmented" role="group" :aria-label="t('panel.projectionAria')">
@@ -486,5 +531,31 @@ const AXES = [
   margin: 0;
   font-size: 0.8rem;
   color: var(--muted);
+}
+.repeat-row.disabled {
+  opacity: 0.45;
+}
+.param-ref {
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.copy-btn {
+  margin-top: 12px;
+}
+/* 來源參考：可收合，避免被誤讀為草稿現況 */
+.source-ref {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.source-ref summary {
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.source-ref .meta {
+  margin-top: 8px;
 }
 </style>

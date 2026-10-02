@@ -30,6 +30,14 @@ function reset() {
 <template>
   <nav class="actions" :class="{ stack }" :aria-label="t('header.mode')">
     <div class="group">
+      <span v-if="stack" class="group-label">{{ t('header.workspace') }}</span>
+      <div class="segmented" role="group" :aria-label="t('header.workspace')" data-tour="workspace">
+        <button :aria-pressed="structure.workspace === 'learn'" :title="t('header.learnTitle')" @click="structure.setWorkspace('learn')">{{ t('header.learn') }}</button>
+        <button :aria-pressed="structure.workspace === 'design'" :title="t('header.designTitle')" @click="structure.setWorkspace('design')">{{ t('header.design') }}</button>
+      </div>
+    </div>
+    <span v-if="!stack" class="divider" aria-hidden="true" />
+    <div class="group">
       <span v-if="stack" class="group-label">{{ t('header.mode') }}</span>
       <div class="segmented" role="group" :aria-label="t('header.mode')">
         <button :aria-pressed="ui.mode === 'explore'" @click="ui.mode = 'explore'">{{ t('header.explore') }}</button>

@@ -17,14 +17,22 @@ export interface AtomInfo {
   kind: 'atom' | 'latticePoint'
   element: string
   elementZh: string
-  /** 分率座標（含晶胞偏移前的基元座標）。 */
+  /** 晶胞內分率座標（已折返、含心型平移，扣除整數晶胞偏移）。 */
   frac: Vec3
+  /** 原始基元座標（相對於所屬晶格點，可為負或超出 1）；晶格點無此欄。 */
+  basisFrac?: Vec3
+  /** 基元座標的符號式附註，例如 (0, y, ¼)；只作附註，不覆蓋數值。 */
+  basisLabel?: string
   cellOffset: Vec3
+  /** 全域分率座標（晶胞內座標 + 晶胞偏移）。 */
+  globalFrac: Vec3
   pointKind: LatticePointKind
   isBoundaryImage: boolean
   /** 基元中的序號（1 起）；晶格點為 0。 */
   motifIndex: number
-  positionLabel?: string
+  /** 鄰近連線：noRule＝本範例未定義距離規則；computed＝依規則計算（可為 0）。與是否繪製無關。 */
+  bondStatus: 'noRule' | 'computed'
+  /** 目前區塊內符合規則的鄰近連線數（不是材料配位數）。 */
   bondCount: number
   /** 依結構產生的一句說明。 */
   note: string
