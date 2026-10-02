@@ -166,6 +166,8 @@ const leadStyle = computed(() => {
   left: 12px;
   right: 12px;
   bottom: 12px;
+  /* 桌面：靠左下、限寬，不橫跨整個檢視區 */
+  max-width: 380px;
   z-index: 5;
   pointer-events: none;
   opacity: 0;
@@ -242,6 +244,11 @@ dd {
   font-size: 0.76rem;
   line-height: 1.55;
   color: var(--text-2);
+}
+@media (max-width: 860px) {
+  .docked {
+    max-width: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .card,

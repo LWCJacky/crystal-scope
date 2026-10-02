@@ -549,7 +549,8 @@ function setHovered(hit: PickResult | null) {
 
 /** 指標移動：每格最多挑選一次（挑選需光線投射）。 */
 function onPointerMove(e: PointerEvent) {
-  if (e.pointerType === 'touch') return
+  // 觸控沒有懸停；聚焦中停靠卡已顯示資訊，不再疊懸停卡
+  if (e.pointerType === 'touch' || renderer?.focused) return
   const rect = host.value!.getBoundingClientRect()
   lastPointer = [e.clientX - rect.left, e.clientY - rect.top]
   if (hoverFrame) return
@@ -558,11 +559,12 @@ function onPointerMove(e: PointerEvent) {
     if (!lastPointer) return
     const hit = renderer?.pick(lastPointer[0], lastPointer[1]) ?? null
     if (hit) hoverSide.value = hit.screen[0] > rect.width - 300 ? 'left' : 'right'
+    host.value!.style.cursor = hit ? 'pointer' : ''
     setHovered(hit)
   })
 }
 
-// ── 觸控：輕點一顆原子 → 鏡頭推近、資訊卡停靠在底部；點空白處返回 ──
+// ── 輕點／點擊一顆原子 → 鏡頭推近、資訊卡停靠在底部；點空白處返回 ──
 
 const focused = ref<PickResult | null>(null)
 const focusColor = computed(() => focused.value?.atom.color ?? '')
@@ -572,18 +574,18 @@ let rotatingBeforeFocus = false
 
 /** 以 capture 階段監聽：要在 OrbitControls 的 start（會把自轉關掉）之前記下是否正在自轉。 */
 function onPointerDown(e: PointerEvent) {
-  if (e.pointerType !== 'touch' || !e.isPrimary) return
+  if (!e.isPrimary || e.button !== 0) return
   tapStart = { x: e.clientX, y: e.clientY, t: performance.now() }
   if (!renderer?.focused) rotatingBeforeFocus = ui.autoRotating
 }
 
-/** 放開時才判斷是「輕點」還是拖曳／縮放（移動 < 10 px 且 < 500 ms）。 */
+/** 放開時才判斷是「點一下」還是拖曳／縮放（觸控：移動 < 10 px；滑鼠：< 6 px；皆 < 500 ms）。 */
 function onPointerUp(e: PointerEvent) {
-  if (e.pointerType !== 'touch' || !e.isPrimary || !tapStart) return
+  if (!e.isPrimary || e.button !== 0 || !tapStart) return
   const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y)
   const elapsed = performance.now() - tapStart.t
   tapStart = null
-  if (moved > 10 || elapsed > 500) return
+  if (moved > (e.pointerType === 'touch' ? 10 : 6) || elapsed > 500) return
   const rect = host.value!.getBoundingClientRect()
   const hit = renderer?.pick(e.clientX - rect.left, e.clientY - rect.top) ?? null
   if (hit) focusAtom(hit)

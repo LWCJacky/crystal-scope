@@ -707,11 +707,15 @@ export class CrystalRenderer {
     this.content.traverse((o) => {
       if (o instanceof THREE.InstancedMesh && o.userData.atoms && o.visible) meshes.push(o)
     })
-    const hit = this.raycaster.intersectObjects(meshes, false).find((i) => i.instanceId !== undefined)
-    if (!hit) return null
-    const mesh = hit.object as THREE.InstancedMesh
-    const atom = (mesh.userData.atoms as SceneAtom[])[hit.instanceId!]
-    return this.projectAtom(atom)
+    for (const hit of this.raycaster.intersectObjects(meshes, false)) {
+      if (hit.instanceId === undefined) continue
+      const mesh = hit.object as THREE.InstancedMesh
+      // 晶胞裁切：被裁掉的球面看不見，不能被選到（光線投射不知道裁切平面）
+      const planes = (mesh.material as THREE.Material).clippingPlanes
+      if (planes?.some((p) => p.distanceToPoint(hit.point) < 0)) continue
+      return this.projectAtom((mesh.userData.atoms as SceneAtom[])[hit.instanceId])
+    }
+    return null
   }
 
   /** 把原子（content 座標）投影到畫面座標。 */
@@ -870,6 +874,8 @@ export class CrystalRenderer {
         polygonOffsetFactor: -1,
       })
       const mesh = new THREE.InstancedMesh(this.disc, material, cut.length)
+      // 截面也屬於該原子：點到截面同樣選到它
+      mesh.userData.atoms = cut.map((c) => c.atom)
       q.setFromUnitVectors(zAxis, plane.normal)
       cut.forEach(({ atom, s }, k) => {
         const center = new THREE.Vector3(...atom.position).addScaledVector(plane.normal, -s)
