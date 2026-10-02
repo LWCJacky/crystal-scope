@@ -34,6 +34,10 @@ export const TIMING = {
   /** 不定進度時爬行曲線的時間常數（秒）與上限。 */
   crawlTau: 6,
   crawlCap: 0.5,
+  /** 完成儀式：進度掃到 100% 與結構補齊的時間、停留時間、交接淡出時間。 */
+  completeMs: 600,
+  holdMs: 350,
+  leaveMs: 320,
 }
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x))
@@ -195,6 +199,7 @@ export const MESSAGES = {
     title: '晶體結構觀察室',
     stages: { script: '下載主程式', init: '初始化', webgl: '建立 3D 顯示', frame: '繪製第一幀' },
     loading: '載入中',
+    ready: '就緒',
     slow: '連線較慢，仍在載入（已收到 {kb} KB）',
     stalled: '似乎停住了，仍在等待…',
     retry: '重試',
@@ -213,6 +218,7 @@ export const MESSAGES = {
     title: 'Crystal Structure Observatory',
     stages: { script: 'Downloading app', init: 'Initialising', webgl: 'Creating 3D view', frame: 'Rendering first frame' },
     loading: 'Loading',
+    ready: 'Ready',
     slow: 'Slow connection, still loading ({kb} KB received)',
     stalled: 'This seems stuck; still waiting…',
     retry: 'Retry',
@@ -231,6 +237,7 @@ export const MESSAGES = {
     title: '結晶構造観察室',
     stages: { script: 'アプリをダウンロード中', init: '初期化中', webgl: '3D 表示を作成中', frame: '最初のフレームを描画中' },
     loading: '読み込み中',
+    ready: '準備完了',
     slow: '接続が遅いため読み込み中です（{kb} KB 受信）',
     stalled: '止まっているようです。待機中…',
     retry: '再試行',
@@ -359,28 +366,59 @@ export function mount(doc, win) {
   // CSS 會在 150 ms 後自行顯示；若腳本較晚才執行且元素已可見，視為已顯示
   if (win.getComputedStyle(root).opacity !== '0') show()
 
+  /**
+   * 完成儀式：進度條從目前位置掃到 100%、百分比數字跟著數到 100、石墨剩餘的環依序點亮；
+   * 停留片刻後石墨放大淡出（像鏡頭推進晶格），主介面同時淡入。
+   * 偏好減少動態效果：進度仍跑完（功能性），但不錯開、不放大，只淡入淡出。
+   */
   function finish() {
     if (done) return
     done = true
     win.clearInterval(ticker)
-    const leave = () => {
-      root.classList.add('out')
-      const app = doc.getElementById('app')
-      if (app) app.removeAttribute('aria-busy')
-      win.setTimeout(() => {
-        root.remove()
-        doc.dispatchEvent(new win.Event('cs:boot-done'))
-      }, 240)
-    }
-    if (!shown) {
+    const app = doc.getElementById('app')
+    const release = () => {
       root.remove()
-      const app = doc.getElementById('app')
       if (app) app.removeAttribute('aria-busy')
       doc.dispatchEvent(new win.Event('cs:boot-done'))
-      return
     }
-    const wait = Math.max(0, TIMING.minShowMs - (Date.now() - shownAt))
-    win.setTimeout(leave, wait)
+    if (!shown) return release()
+
+    const reduced = win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const from = Math.min(machine.state.fraction, 0.999)
+    machine.ready()
+    const completeMs = reduced ? 200 : TIMING.completeMs
+    const t0 = Date.now()
+    root.classList.add('completing')
+    stageEl.textContent = T.ready
+
+    // 進度條：改用較長的 ease-out 掃到底
+    bar.style.transition = `transform ${completeMs}ms cubic-bezier(0.23, 1, 0.32, 1)`
+    bar.style.transform = 'scaleX(1)'
+
+    // 百分比數字跟著數到 100
+    const count = () => {
+      const p = Math.min(1, (Date.now() - t0) / completeMs)
+      const eased = 1 - Math.pow(1 - p, 3)
+      pct.textContent = `${Math.round((from + (1 - from) * eased) * 100)}%`
+      if (p < 1) win.requestAnimationFrame(count)
+    }
+    win.requestAnimationFrame(count)
+
+    // 石墨：剩餘的環依序點亮（錯開 ≤ 40 ms，總長不超過 completeMs）
+    const lit = revealCount(from, shapes.length)
+    const remaining = shapes.length - lit
+    const stagger = reduced ? 0 : Math.min(40, completeMs / Math.max(1, remaining))
+    shapes.forEach((els, i) => {
+      if (i < lit) return
+      win.setTimeout(() => els.forEach((el) => el.classList.add('on')), (i - lit) * stagger)
+    })
+
+    const minShowWait = Math.max(0, TIMING.minShowMs - (Date.now() - shownAt))
+    win.setTimeout(() => {
+      root.classList.add('out')
+      if (app) app.removeAttribute('aria-busy')
+      win.setTimeout(release, TIMING.leaveMs + 40)
+    }, Math.max(minShowWait, completeMs + TIMING.holdMs))
   }
 
   function fail(code, detail) {
@@ -504,8 +542,7 @@ export function mount(doc, win) {
     ready() {
       win.removeEventListener('error', onError)
       win.removeEventListener('unhandledrejection', onError)
-      machine.ready()
-      render()
+      // 不先 render：讓完成儀式從目前的進度掃到 100%
       finish()
     },
     fail,
