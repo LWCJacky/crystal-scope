@@ -248,11 +248,11 @@ export const MESSAGES = {
 }
 
 const ISSUES_URL = 'https://github.com/LWCJacky/crystal-scope/issues'
-const RINGS = 3
-const HEX = 13
+const RINGS = 2
+const HEX = 19
 /** 俯視壓扁比例（營造兩層堆疊的立體感）與 B 層抬升高度 */
-const SQUASH = 0.62
-const LIFT = 22
+const SQUASH = 0.72
+const LIFT = 34
 
 /** 建立兩層石墨的 SVG；回傳可依進度顯示的六角形元素清單（A 層在前、B 層在後）。 */
 function buildGraphite(svg) {
@@ -277,7 +277,7 @@ function buildGraphite(svg) {
         const dot = document.createElementNS(ns, 'circle')
         dot.setAttribute('cx', x.toFixed(1))
         dot.setAttribute('cy', y.toFixed(1))
-        dot.setAttribute('r', '1.7')
+        dot.setAttribute('r', layer.id === 'B' ? '2.6' : '2')
         g.appendChild(dot)
       }
       shapes.push(g.children.length ? Array.from(g.children).slice(-7) : [])

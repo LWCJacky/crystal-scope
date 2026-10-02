@@ -89,10 +89,11 @@
       }
       /* 石墨：兩層蜂巢，B 層依 AB 堆疊錯開；元素依進度逐圈淡入 */
       .boot-graphite {
-        width: 240px;
-        height: 160px;
-        margin: 0 auto 18px;
+        width: 280px;
+        height: 190px;
+        margin: 0 auto 14px;
         overflow: visible;
+        shape-rendering: geometricPrecision;
       }
       .boot-graphite polygon,
       .boot-graphite circle {
@@ -101,24 +102,24 @@
       }
       .boot-graphite polygon {
         fill: none;
-        stroke: var(--boot-c);
-        stroke-width: 1.1;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
       }
-      .boot-graphite circle {
-        fill: var(--boot-fg);
-      }
-      /* 下層（A）略淡、上層（B）清楚，讀起來是兩片石墨烯疊在一起 */
+      /* 下層（A）：灰藍細線；上層（B）：主題色粗線＋白色原子，兩片石墨烯清楚分開 */
       .boot-graphite .la polygon {
-        stroke-opacity: 0.45;
+        stroke: var(--boot-muted);
+        stroke-width: 1.3;
+        stroke-opacity: 0.7;
       }
       .boot-graphite .la circle {
-        fill-opacity: 0.45;
+        fill: var(--boot-muted);
       }
       .boot-graphite .lb polygon {
-        stroke-opacity: 1;
+        stroke: var(--boot-c);
+        stroke-width: 1.9;
       }
       .boot-graphite .lb circle {
-        fill-opacity: 1;
+        fill: var(--boot-fg);
       }
       .boot-graphite .on {
         opacity: 1;
@@ -135,8 +136,13 @@
           opacity: 1;
         }
       }
-      #boot.error .boot-graphite polygon {
+      #boot.error .boot-graphite polygon,
+      #boot.error .boot-graphite circle {
         stroke: var(--boot-muted);
+        fill: var(--boot-muted);
+      }
+      #boot.error .boot-graphite polygon {
+        fill: none;
       }
       #boot.error .boot-graphite {
         animation: none;
@@ -241,7 +247,7 @@
   <body>
     <div id="boot" role="status" aria-live="polite">
       <div class="boot-panel">
-        <svg class="boot-graphite" viewBox="-120 -80 240 160" aria-hidden="true"></svg>
+        <svg class="boot-graphite" viewBox="-140 -95 280 190" aria-hidden="true"></svg>
         <p class="boot-title">CrystalScope</p>
         <p class="boot-sub">晶體結構觀察室</p>
         <div class="boot-track"><div class="boot-bar"></div></div>
