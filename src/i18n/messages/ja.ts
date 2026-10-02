@@ -154,6 +154,11 @@ export default {
   'ladder.caveatSchematic': '模式単位格子に実寸はなく、スケールバーは 1 単位 = 1 Å として計算しています。',
   'ladder.fov': '視野の高さ ≈ {h}',
 
+  'error.contextLost': '3D 表示が中断されました',
+  'error.contextLostBody': 'GPU のリセットやメモリ不足により WebGL コンテキストが失われました。「再構築」で 3D 表示を作り直します。繰り返す場合はスケールの旅を終了するか、周期配列の数を減らしてください。',
+  'error.rebuild': '3D 表示を再構築',
+  'error.runtime': 'エラーが発生しました：',
+  'error.report': '問題を報告',
   'kind.corner': '頂点',
   'kind.base': '底心',
   'kind.body': '体心',

@@ -154,6 +154,11 @@ export default {
   'ladder.caveatSchematic': 'Model cells have no real size; the scale bar assumes 1 unit = 1 Å.',
   'ladder.fov': 'Field of view ≈ {h}',
 
+  'error.contextLost': '3D view interrupted',
+  'error.contextLostBody': 'The WebGL context was lost (GPU reset or out of memory). Press "Rebuild" to recreate the 3D view; if it keeps happening, leave the scale journey or reduce the repeat count.',
+  'error.rebuild': 'Rebuild 3D view',
+  'error.runtime': 'Something went wrong:',
+  'error.report': 'Report a problem',
   'kind.corner': 'Corner',
   'kind.base': 'Base centre',
   'kind.body': 'Body centre',

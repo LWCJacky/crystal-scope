@@ -183,6 +183,12 @@ export class CrystalRenderer {
   onUserInteract: (() => void) | null = null
   /** 每次繪製完成後呼叫（懸停資訊卡用來跟著球體移動）。 */
   onRendered: (() => void) | null = null
+  /** 第一幀繪製完成（只呼叫一次；啟動層據此結束）。 */
+  onFirstFrame: (() => void) | null = null
+  /** WebGL 上下文遺失／復原（弱顯卡、分頁長時間背景化時可能發生）。 */
+  onContextLost: (() => void) | null = null
+  onContextRestored: (() => void) | null = null
+  private firstFrameDone = false
   private readonly raycaster = new THREE.Raycaster()
   private highlighted: { mesh: THREE.InstancedMesh; index: number; color: THREE.Color } | null = null
   private pieceGroups: { group: THREE.Group; edge: THREE.Material; face: THREE.Material; centroidAngle: number }[] = []
@@ -203,6 +209,15 @@ export class CrystalRenderer {
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.localClippingEnabled = true
     container.appendChild(this.renderer.domElement)
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      // 不 preventDefault 的話瀏覽器不會嘗試復原
+      e.preventDefault()
+      this.onContextLost?.()
+    })
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+      this.onContextRestored?.()
+      this.requestRender()
+    })
 
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1000)
     // 晶體學慣例以 c 軸（z）朝上
@@ -431,6 +446,10 @@ export class CrystalRenderer {
     if (this.ladderView) this.renderLadder(this.ladderView)
     else this.renderer.render(this.scene, this.active)
     this.onRendered?.()
+    if (!this.firstFrameDone) {
+      this.firstFrameDone = true
+      this.onFirstFrame?.()
+    }
   }
 
   /**

@@ -154,6 +154,11 @@ export default {
   'ladder.caveatSchematic': '示意晶胞無真實尺寸，比例尺以 1 單位 = 1 Å 計算。',
   'ladder.fov': '視野高度 ≈ {h}',
 
+  'error.contextLost': '3D 顯示中斷',
+  'error.contextLostBody': '顯示卡重設或記憶體不足導致 WebGL 上下文遺失。點「重建」重新建立 3D 顯示；若反覆發生，請關閉尺度之旅或降低週期排列數。',
+  'error.rebuild': '重建 3D 顯示',
+  'error.runtime': '發生錯誤：',
+  'error.report': '回報問題',
   'kind.corner': '角落',
   'kind.base': '底心',
   'kind.body': '體心',

@@ -19,6 +19,7 @@ import type { LatticeSurfaceSpec } from '../render/latticeSurface'
 import { useDemo } from '../composables/useDemo'
 import { useReducedMotion } from '../composables/useReducedMotion'
 import { useI18n } from '../i18n'
+import { bootFail, bootReady, bootReport } from '../boot/report'
 import {
   type AtomInfo,
   CrystalRenderer,
@@ -607,8 +608,44 @@ function resetView() {
   renderer?.resetView(fracToCart(basis, blockCorner(ui.viewMode).map((n) => n / 2) as Vec3), Math.hypot(...corner))
 }
 
+/** WebGL 上下文遺失後重建渲染器並重畫目前場景。 */
+function rebuildRenderer() {
+  renderer?.dispose()
+  renderer = null
+  ui.contextLost = false
+  try {
+    renderer = createRenderer()
+    rendererGen.value++
+    resetView()
+  } catch {
+    ui.contextLost = true
+  }
+}
+
+const rendererGen = ref(0)
+
+function createRenderer(): CrystalRenderer {
+  const r = new CrystalRenderer(host.value!)
+  r.onContextLost = () => (ui.contextLost = true)
+  r.onContextRestored = () => (ui.contextLost = false)
+  r.onRendered = followHovered
+  r.onUserInteract = () => {
+    ui.autoRotating = false
+    clearHover()
+  }
+  r.onFirstFrame = bootReady
+  return r
+}
+
 onMounted(() => {
-  renderer = new CrystalRenderer(host.value!)
+  try {
+    renderer = createRenderer()
+    bootReport('webgl')
+  } catch (e) {
+    bootFail('webgl', e instanceof Error ? e.message : undefined)
+    ui.contextLost = true
+    return
+  }
   document.fonts?.ready.then(() => (fontsReady.value = true))
   const sizeObserver = new ResizeObserver(() => (hostHeight.value = host.value?.clientHeight ?? 600))
   sizeObserver.observe(host.value!)
@@ -616,11 +653,11 @@ onMounted(() => {
   host.value!.addEventListener('pointermove', onPointerMove)
   host.value!.addEventListener('pointerdown', onPointerDown)
   host.value!.addEventListener('pointerleave', clearHover)
-  renderer.onRendered = followHovered
 
   // 於 renderer 建立後才開始追蹤；任何結構或顯示設定變動都會重建場景
   watchEffect(() => {
     void fontsReady.value
+    void rendererGen.value
     if (!structure.cellValidation.valid) return
     if (ladderActive()) {
       ladder = buildLadder()
@@ -663,10 +700,6 @@ onMounted(() => {
     () => ui.autoRotating,
     (on) => renderer?.setAutoRotate(on),
   )
-  renderer.onUserInteract = () => {
-    ui.autoRotating = false
-    clearHover()
-  }
   watch(
     () => ui.projection,
     (mode) => renderer?.setProjection(mode),
@@ -710,6 +743,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="host" class="viewport" :aria-label="t('viewport.aria')">
+    <!-- WebGL 上下文遺失／無法建立：不留空白，給使用者明確的出口 -->
+    <div v-if="ui.contextLost" class="gl-lost" role="alert">
+      <p class="gl-title">{{ t('error.contextLost') }}</p>
+      <p class="gl-body">{{ t('error.contextLostBody') }}</p>
+      <button class="primary" @click="rebuildRenderer">{{ t('error.rebuild') }}</button>
+    </div>
     <AtomCard
       :info="hovered?.atom.info ?? null"
       :x="hovered?.screen[0] ?? 0"
@@ -746,6 +785,32 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   touch-action: none;
+}
+.gl-lost {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+}
+.gl-title {
+  margin: 0;
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+.gl-body {
+  margin: 0 0 6px;
+  max-width: 420px;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.gl-lost button {
+  justify-self: center;
 }
 .scalebar {
   --accent: var(--amber);

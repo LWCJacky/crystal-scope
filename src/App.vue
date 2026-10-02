@@ -6,7 +6,8 @@ import GuideTour from './components/GuideTour.vue'
 import SystemList from './components/SystemList.vue'
 import ViewportCanvas from './components/ViewportCanvas.vue'
 import { useDemoClock } from './composables/useDemoClock'
-import { onMounted, watchEffect } from 'vue'
+import { afterBoot } from './boot/report'
+import { onBeforeUnmount, onMounted, watchEffect } from 'vue'
 import { useI18n } from './i18n'
 import { LOCALES } from './i18n/types'
 import { useUiStore } from './stores/ui'
@@ -22,10 +23,17 @@ watchEffect(() => {
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.description'))
 })
 
-// 第一次造訪：先讓預設範例的建構動畫播一段，再開啟導覽
+// 第一次造訪：等啟動層消失、建構動畫播一段後再開啟導覽
 onMounted(() => {
-  if (!ui.tourSeen) setTimeout(() => ui.openTour(), 1200)
+  afterBoot(() => {
+    if (!ui.tourSeen) setTimeout(() => ui.openTour(), 1200)
+  })
 })
+
+// 執行中的未捕捉錯誤：以提示條告知，不中斷整站
+const onRuntimeError = (e: Event) => (ui.runtimeError = String((e as CustomEvent<string>).detail))
+onMounted(() => window.addEventListener('cs:runtime-error', onRuntimeError))
+onBeforeUnmount(() => window.removeEventListener('cs:runtime-error', onRuntimeError))
 </script>
 
 <template>
@@ -39,6 +47,13 @@ onMounted(() => {
     <AnimationBar class="area-bottom" />
   </div>
   <GuideTour />
+  <Transition name="toast">
+    <div v-if="ui.runtimeError" class="toast" role="alert">
+      <span class="toast-text"><b>{{ t('error.runtime') }}</b> {{ ui.runtimeError }}</span>
+      <a class="toast-link" href="https://github.com/LWCJacky/crystal-scope/issues" target="_blank" rel="noopener">{{ t('error.report') }}</a>
+      <button class="ghost" :aria-label="t('settings.close')" @click="ui.runtimeError = null">✕</button>
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -88,6 +103,52 @@ onMounted(() => {
 }
 .layout[data-mode='presentation'] .area-right {
   display: none;
+}
+
+/* 執行期錯誤提示條：右下角進出，不擋住操作 */
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--rose);
+  border-left-width: 3px;
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 0.86rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.toast-text {
+  overflow-wrap: anywhere;
+}
+.toast-link {
+  white-space: nowrap;
+  color: var(--accent);
+}
+.toast-enter-active {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+.toast-leave-active {
+  transition: opacity 120ms var(--ease-out);
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.toast-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter-from {
+    transform: none;
+  }
 }
 
 /* 窄螢幕：暫以上下堆疊；抽屜／分頁於 M5 實作 */

@@ -11,10 +11,254 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="以 Vue 建構的開源互動晶體結構觀察室：3D 模型、晶胞動畫與參數控制，探索七大晶系及原子排列。" />
+    <meta name="color-scheme" content="light dark" />
     <title>CrystalScope｜晶體結構觀察室</title>
+    <style>
+      /* 啟動層：先於主程式顯示，所以樣式內嵌、只用系統字體；主題色與 style.css 一致 */
+      :root {
+        --boot-bg: #f5f6fa;
+        --boot-fg: #141821;
+        --boot-muted: #6b7384;
+        --boot-line: #cdd2de;
+        --boot-c: #6b5be6;
+        --boot-err: #c8456d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --boot-bg: #0a0d13;
+          --boot-fg: #eceef3;
+          --boot-muted: #8a93a3;
+          --boot-line: #2f3846;
+          --boot-c: #a596ff;
+          --boot-err: #f08cab;
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--boot-bg);
+      }
+      #app[aria-busy='true'] {
+        opacity: 0;
+      }
+      #app {
+        opacity: 1;
+        transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        place-items: center;
+        background: var(--boot-bg);
+        color: var(--boot-fg);
+        font:
+          15px/1.5 system-ui,
+          -apple-system,
+          'PingFang TC',
+          'Noto Sans TC',
+          'Hiragino Sans',
+          sans-serif;
+        /* 150 ms 後自動出現（不依賴 JS，慢速網路下樣式表也可能延後腳本執行）；
+           快取命中時主程式會在這之前把它移除，不會閃一下 */
+        opacity: 0;
+        animation: boot-appear 0ms linear 150ms forwards;
+        transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      @keyframes boot-appear {
+        to {
+          opacity: 1;
+        }
+      }
+      #boot.show {
+        opacity: 1;
+      }
+      #boot.out {
+        animation: none;
+        opacity: 0;
+        transform: scale(0.98);
+        transition:
+          opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+          transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+        pointer-events: none;
+      }
+      .boot-panel {
+        width: min(360px, calc(100vw - 32px));
+        text-align: center;
+      }
+      /* 石墨：兩層蜂巢，B 層依 AB 堆疊錯開；元素依進度逐圈淡入 */
+      .boot-graphite {
+        width: 240px;
+        height: 160px;
+        margin: 0 auto 18px;
+        overflow: visible;
+      }
+      .boot-graphite polygon,
+      .boot-graphite circle {
+        opacity: 0;
+        transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .boot-graphite polygon {
+        fill: none;
+        stroke: var(--boot-c);
+        stroke-width: 1.1;
+      }
+      .boot-graphite circle {
+        fill: var(--boot-fg);
+      }
+      /* 下層（A）略淡、上層（B）清楚，讀起來是兩片石墨烯疊在一起 */
+      .boot-graphite .la polygon {
+        stroke-opacity: 0.45;
+      }
+      .boot-graphite .la circle {
+        fill-opacity: 0.45;
+      }
+      .boot-graphite .lb polygon {
+        stroke-opacity: 1;
+      }
+      .boot-graphite .lb circle {
+        fill-opacity: 1;
+      }
+      .boot-graphite .on {
+        opacity: 1;
+      }
+      /* 不定進度：已長出的部分輕微呼吸（CSS 動畫，主執行緒忙碌時仍流暢） */
+      #boot.indeterminate .boot-graphite {
+        animation: boot-breathe 2.4s cubic-bezier(0.77, 0, 0.175, 1) infinite alternate;
+      }
+      @keyframes boot-breathe {
+        from {
+          opacity: 0.55;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      #boot.error .boot-graphite polygon {
+        stroke: var(--boot-muted);
+      }
+      #boot.error .boot-graphite {
+        animation: none;
+        opacity: 0.6;
+      }
+      .boot-title {
+        margin: 0 0 2px;
+        font-size: 1.05rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+      .boot-sub {
+        margin: 0 0 14px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        color: var(--boot-muted);
+      }
+      .boot-track {
+        position: relative;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--boot-line);
+        overflow: hidden;
+      }
+      /* 進度以 transform 推進（不動 width），持續運動用 linear */
+      .boot-bar {
+        position: absolute;
+        inset: 0;
+        background: var(--boot-c);
+        transform-origin: left center;
+        transform: scaleX(0);
+        transition: transform 300ms linear;
+      }
+      #boot.error .boot-bar {
+        background: var(--boot-err);
+      }
+      .boot-meta {
+        display: flex;
+        justify-content: space-between;
+        margin: 8px 0 0;
+        font-size: 0.82rem;
+        color: var(--boot-muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .boot-hint {
+        min-height: 1.5em;
+        margin: 6px 0 0;
+        font-size: 0.82rem;
+        color: var(--boot-muted);
+      }
+      .boot-error {
+        margin: 10px 0 0;
+        padding: 12px 14px;
+        border: 1px solid var(--boot-err);
+        border-radius: 12px;
+        text-align: left;
+        font-size: 0.88rem;
+      }
+      .boot-error p {
+        margin: 0 0 10px;
+      }
+      .boot-error-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .boot-error button {
+        font: inherit;
+        font-weight: 600;
+        padding: 5px 13px;
+        border: 1px solid var(--boot-line);
+        border-radius: 999px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      .boot-error .boot-retry {
+        background: var(--boot-c);
+        border-color: var(--boot-c);
+        color: var(--boot-bg);
+      }
+      .boot-issues {
+        margin-left: auto;
+        font-size: 0.8rem;
+        color: var(--boot-muted);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-graphite polygon,
+        .boot-graphite circle {
+          transition: none;
+        }
+        #boot.indeterminate .boot-graphite {
+          animation: none;
+        }
+        #boot.out {
+          transform: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="boot" role="status" aria-live="polite">
+      <div class="boot-panel">
+        <svg class="boot-graphite" viewBox="-120 -80 240 160" aria-hidden="true"></svg>
+        <p class="boot-title">CrystalScope</p>
+        <p class="boot-sub">晶體結構觀察室</p>
+        <div class="boot-track"><div class="boot-bar"></div></div>
+        <p class="boot-meta"><span class="boot-stage"></span><span class="boot-pct">0%</span></p>
+        <p class="boot-hint"></p>
+        <div class="boot-error" hidden>
+          <p class="boot-error-text"></p>
+          <div class="boot-error-actions">
+            <button type="button" class="boot-retry">重試</button>
+            <button type="button" class="boot-reload">重新整理</button>
+            <a class="boot-issues" href="https://github.com/LWCJacky/crystal-scope/issues" target="_blank" rel="noopener">回報問題</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="app" aria-busy="true"></div>
+    <!--BOOT_SCRIPT-->
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

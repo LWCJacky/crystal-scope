@@ -56,6 +56,9 @@ export const useUiStore = defineStore('ui', () => {
   const autoRotatePref = toRef(settings, 'autoRotate')
   const autoRotateSeconds = toRef(settings, 'autoRotateSeconds')
   const autoRotating = ref(false)
+  /** 執行中的例外狀態：WebGL 上下文遺失、未捕捉的錯誤訊息（供提示條顯示）。 */
+  const contextLost = ref(false)
+  const runtimeError = ref<string | null>(null)
   /** 使用導覽：第一次造訪自動開啟，之後可由「說明」重開。 */
   const tourOpen = ref(false)
   const tourStep = ref(0)
@@ -105,6 +108,8 @@ export const useUiStore = defineStore('ui', () => {
     autoRotatePref,
     autoRotateSeconds,
     autoRotating,
+    contextLost,
+    runtimeError,
     tourOpen,
     tourStep,
     tourSeen,
