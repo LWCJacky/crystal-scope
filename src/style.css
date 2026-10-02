@@ -1,0 +1,85 @@
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1d2330;
+  --muted: #667085;
+  --border: #dde1e8;
+  --accent: #3b6fd1;
+  --accent-soft: #e8effc;
+  --warn: #9a5b00;
+  --warn-soft: #fdf0d9;
+  color-scheme: light dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    'PingFang TC',
+    'Noto Sans TC',
+    'Microsoft JhengHei',
+    sans-serif;
+  color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b;
+    --surface: #1a1e26;
+    --text: #e4e7ee;
+    --muted: #9aa3b5;
+    --border: #2c323e;
+    --accent: #6f9bf0;
+    --accent-soft: #1f2b44;
+    --warn: #f0b860;
+    --warn-soft: #3a2c14;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+button {
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.panel-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
