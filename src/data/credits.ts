@@ -46,6 +46,13 @@ export const DEPENDENCIES: Dependency[] = Object.entries(typeof __APP_DEPS__ ===
   }))
   .sort((p, q) => (p.role === q.role ? p.name.localeCompare(q.name) : p.role === 'runtime' ? -1 : 1))
 
+/** 開發過程中使用的 AI 協作工具（規劃、程式撰寫與審查）。 */
+export const AI_TOOLS = [
+  { name: 'GPT-6', vendor: 'OpenAI', url: 'https://openai.com/' },
+  { name: 'Claude Opus 5.5', vendor: 'Anthropic', url: 'https://www.anthropic.com/' },
+  { name: 'Claude Fable 5.1', vendor: 'Anthropic', url: 'https://www.anthropic.com/' },
+] as const
+
 /** 字體經 Fontsource 套件隨網站打包，不連外部服務。 */
 export const FONTS = [
   { name: 'Nunito (variable)', license: 'SIL OFL 1.1', url: 'https://fontsource.org/fonts/nunito' },

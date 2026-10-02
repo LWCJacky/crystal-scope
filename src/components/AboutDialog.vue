@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { DEPENDENCIES, FONTS, PROJECT } from '../data/credits'
+import { AI_TOOLS, DEPENDENCIES, FONTS, PROJECT } from '../data/credits'
 import { useI18n } from '../i18n'
 import ModuleIcon from './icons/ModuleIcon.vue'
 
@@ -83,6 +83,18 @@ defineExpose({ open })
           </li>
         </ul>
         <p class="note">{{ t('about.fontsNote') }}</p>
+      </section>
+
+      <section>
+        <h3>{{ t('about.ai') }}</h3>
+        <ul class="deps">
+          <li v-for="a in AI_TOOLS" :key="a.name">
+            <a :href="a.url" target="_blank" rel="noopener">{{ a.name }}</a>
+            <span class="ver" />
+            <span class="lic">{{ a.vendor }}</span>
+          </li>
+        </ul>
+        <p class="note">{{ t('about.aiNote') }}</p>
       </section>
 
       <footer>

@@ -121,6 +121,8 @@ export default {
   'about.build': '開発・ビルド用',
   'about.fonts': 'フォント',
   'about.fontsNote': 'フォントは Fontsource パッケージによりサイトと共に同梱され、外部サービスには接続しません。',
+  'about.ai': 'AI 協働ツール',
+  'about.aiNote': '開発過程で企画・コーディング・レビューに使用。科学的内容と最終判断は作者の責任です。',
   'about.close': '閉じる',
   'tour.language': '言語を選択 · Choose language · 選擇語言',
   'tour.languageNote': '専門用語は英語を基本とし、他の言語では英語の原語を併記します。言語は上部または設定からいつでも変更できます。',

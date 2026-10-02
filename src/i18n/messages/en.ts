@@ -121,6 +121,8 @@ export default {
   'about.build': 'Development and build',
   'about.fonts': 'Fonts',
   'about.fontsNote': 'Fonts are bundled with the site via Fontsource packages; nothing is fetched from external services.',
+  'about.ai': 'AI assistance',
+  'about.aiNote': 'Used during development for planning, coding and review; the scientific content and final decisions are the author’s responsibility.',
   'about.close': 'Close',
   'tour.language': 'Choose language · 選擇語言 · 言語を選択',
   'tour.languageNote': 'Technical terms are given in English; other languages show the English original alongside. You can change the language any time from the header or settings.',

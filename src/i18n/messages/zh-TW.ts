@@ -121,6 +121,8 @@ export default {
   'about.build': '開發與建置',
   'about.fonts': '字體',
   'about.fontsNote': '字體經 Fontsource 套件隨網站打包，載入時不連任何外部服務。',
+  'about.ai': 'AI 協作工具',
+  'about.aiNote': '開發過程中用於規劃、程式撰寫與審查；科學內容與最終決定由作者負責。',
   'about.close': '關閉',
   'tour.language': '選擇語言 · Choose language · 言語を選択',
   'tour.languageNote': '專業名詞以英文為主；切換其他語言時會在旁邊附上英文原文。之後可隨時在頂部或設定中更改。',
