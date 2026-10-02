@@ -24,6 +24,8 @@ export const useUiStore = defineStore('ui', () => {
   const showBonds = toRef(settings, 'showBonds')
   /** 在原點標示晶軸夾角 α、β、γ（弧線或直角記號）。 */
   const showAngles = toRef(settings, 'showAngles')
+  /** 投影方式：透視或正交（正交時沿晶軸觀看，前後原子完全重疊）。 */
+  const projection = toRef(settings, 'projection')
   /** 球體大小倍率（示意）。 */
   const sphereScale = toRef(settings, 'sphereScale')
   /** 硬球接觸模型：半徑 = 最近鄰距離 / 2，僅單一元素金屬可用。 */
@@ -85,6 +87,7 @@ export const useUiStore = defineStore('ui', () => {
     showAssociation,
     showBonds,
     showAngles,
+    projection,
     sphereScale,
     hardSphere,
     clipToCell,

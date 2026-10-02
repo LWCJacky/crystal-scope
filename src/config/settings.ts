@@ -3,6 +3,8 @@
  * 從 cookie 讀回的資料一律經過 sanitize，型別不符或超出範圍的值改用預設值。
  */
 
+import { detectLocale, LOCALE_IDS, type Locale } from '../i18n/types'
+
 interface SettingDef<T> {
   default: T
   parse: (raw: unknown) => T | undefined
@@ -36,6 +38,8 @@ export const SETTINGS_SCHEMA = {
   assemblyMode: oneOf('wedge6', ['wedge6', 'cell3'] as const, '六方柱拼裝方式'),
   // 介面
   appMode: oneOf('explore', ['explore', 'presentation'] as const, '介面模式'),
+  /** 介面語言；預設依瀏覽器語言判斷，只有使用者改過才寫入 cookie。 */
+  locale: oneOf<Locale>(detectLocale(), LOCALE_IDS, '介面語言'),
   tourSeen: bool(false, '已看過導覽'),
   // 顯示
   showAxes: bool(true, '顯示晶格向量'),
@@ -43,6 +47,8 @@ export const SETTINGS_SCHEMA = {
   showBoundaryImages: bool(true, '顯示邊界複本'),
   showBonds: bool(true, '顯示鍵'),
   showAngles: bool(true, '顯示晶軸夾角 α、β、γ'),
+  /** 正交投影：沿視線的點完全重疊、平行邊保持平行，與課本畫法一致；透視較有立體感。 */
+  projection: oneOf('perspective', ['perspective', 'orthographic'] as const, '投影方式'),
   sphereScale: num(1, 0.3, 1.6, '球體大小倍率'),
 } as const
 

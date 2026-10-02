@@ -3,8 +3,8 @@ import type { LatticeBasis, Vec3 } from './types'
 export type DirectionValidation = { valid: true } | { valid: false; reason: string }
 
 export function validateIndices(u: number, v: number, w: number): DirectionValidation {
-  if (![u, v, w].every(Number.isInteger)) return { valid: false, reason: '晶向指數須為整數' }
-  if (u === 0 && v === 0 && w === 0) return { valid: false, reason: '[000] 不代表任何方向' }
+  if (![u, v, w].every(Number.isInteger)) return { valid: false, reason: 'Direction indices must be integers' }
+  if (u === 0 && v === 0 && w === 0) return { valid: false, reason: '[000] does not define a direction' }
   return { valid: true }
 }
 

@@ -12,7 +12,7 @@ import { easeInOut } from './easing'
  * 交接處以不透明度淡入淡出。畫面上的大小與比例尺完全一致，觀眾感覺是一鏡到底。
  */
 
-export type LadderStageId = 'macro' | 'block' | 'cell' | 'motif'
+export type LadderStageId = 'macro' | 'field' | 'block' | 'cell' | 'motif'
 
 export interface LadderStageSpec {
   id: LadderStageId
@@ -29,11 +29,22 @@ export interface LadderStageSpec {
   minHeight?: number
 }
 
+/** 時間軸分段：由上一段的終點（或起點）在 seconds 秒內放大到 toHeight。 */
+export interface LadderSegment {
+  toHeight: number
+  seconds: number
+}
+
 export interface LadderProfile {
   /** 起點與終點的視野高度（公尺）。 */
   startHeight: number
   endHeight: number
   stages: LadderStageSpec[]
+  /**
+   * 時間軸：各段在對數空間內等速，但段與段的速度不同——
+   * 沒有可見結構的區段（晶粒內部、單晶平坦表面）快速掠過，有內容的區段放慢。
+   */
+  segments: LadderSegment[]
   /** 基元階段相機目標由晶胞中心移到原點晶格點的區間（視野高度，公尺）。 */
   targetShift: [number, number]
 }
@@ -68,8 +79,12 @@ export function ladderHeight(profile: LadderProfile, zoom: number): number {
 
 /** 晶格各級的場景單位為 Å。 */
 export const ANGSTROM = 1e-10
+/** 實心球區塊的邊長（晶胞數）。 */
+export const BLOCK_CELLS = 11
 /** 起點視野高度 4 cm；巨觀物件約 2 cm。 */
 export const START_HEIGHT = 0.04
+/** 金屬棒：半徑 1 單位 = 1 cm。 */
+export const ROD_METRES_PER_UNIT = 0.01
 /** 巨觀物件相機凍結的視野高度：10 µm（晶粒約 50 µm，此時已在單一晶粒內）。 */
 export const MACRO_MIN_HEIGHT = 1e-5
 
@@ -78,22 +93,69 @@ export const MACRO_MIN_HEIGHT = 1e-5
  * 各級淡入淡出以晶胞尺寸 a 的倍數定義，材料不同時仍保持相同的畫面節奏。
  * macroMetresPerUnit：巨觀場景 1 單位對應的公尺數。
  */
-export function buildLadderProfile(cellMetres: number, macroMetresPerUnit = 0.01): LadderProfile {
+export function buildLadderProfile(cellMetres: number, macroMetresPerUnit = 0.01, polycrystalline = true): LadderProfile {
   const a = cellMetres
+  const endHeight = 1.4 * a
+  // 巨觀物件 → 表面晶格的交接高度：單晶在 1 mm 附近（外形邊緣已在畫面外），
+  // 多晶在 10 µm 附近（已進入單一晶粒，切面為均勻色）
+  const macroOut: [number, number] = polycrystalline ? [8e-6, 3e-6] : [9e-4, 3.5e-4]
+  const fieldIn: [number, number] = polycrystalline ? [1.4e-5, 4e-6] : [2e-3, 6e-4]
   return {
     startHeight: START_HEIGHT,
-    endHeight: 1.4 * a,
+    endHeight,
     stages: [
-      // 巨觀物件：區塊長到約 1/8 畫面高時開始淡出（與區塊淡入重疊，任一時刻皆有一級接近不透明）
-      { id: 'macro', metresPerUnit: macroMetresPerUnit, fadeIn: null, fadeOut: [60 * a, 25 * a], minHeight: MACRO_MIN_HEIGHT },
-      // 5×5×5 區塊：在畫面上約 1/16 高時浮現，剩約 2 個晶胞高時淡出
-      { id: 'block', metresPerUnit: ANGSTROM, fadeIn: [80 * a, 30 * a], fadeOut: [4 * a, 2.5 * a] },
-      // 晶胞級（含座標軸與夾角）在相機目標移向原點晶格點時淡出，交給基元級
-      { id: 'cell', metresPerUnit: ANGSTROM, fadeIn: [5 * a, 3 * a], fadeOut: [2.4 * a, 1.6 * a] },
+      {
+        id: 'macro',
+        metresPerUnit: macroMetresPerUnit,
+        fadeIn: null,
+        fadeOut: macroOut,
+        // 金屬棒切面在極近距離會超出 float32 精度，於 10 µm 凍結相機（此時已是均勻色）；單晶外形不需要
+        minHeight: polycrystalline ? MACRO_MIN_HEIGHT : undefined,
+      },
+      // 表面晶格：GPU 依視野即時產生表面的原子，遠處自動融入同色的實心面，
+      // 由 1 mm 一路連續到晶格尺度；相機俯視表面，不會穿進晶格內部
+      { id: 'field', metresPerUnit: ANGSTROM, fadeIn: fieldIn, fadeOut: [14 * a, 10 * a] },
+      // 11³ 實心球（含鍵）：承接表面晶格的中央區域，頂面與表面齊平
+      { id: 'block', metresPerUnit: ANGSTROM, fadeIn: [20 * a, 12 * a], fadeOut: [10 * a, 7.5 * a] },
+      // 晶胞級先於區塊淡出前完全顯示（兩者的中央晶胞完全重合，重疊繪製看不出差異），
+      // 再於相機目標移向原點晶格點時淡出，交給基元級
+      { id: 'cell', metresPerUnit: ANGSTROM, fadeIn: [15 * a, 12 * a], fadeOut: [2.4 * a, 1.6 * a] },
       { id: 'motif', metresPerUnit: ANGSTROM, fadeIn: [2.2 * a, 1.6 * a], fadeOut: null },
     ],
     targetShift: [2.4 * a, 1.6 * a],
+    segments: polycrystalline
+      ? [
+          { toHeight: 4e-4, seconds: 3.5 }, // 4 cm → 400 µm：看見金屬棒，晶粒逐漸浮現
+          { toHeight: 4e-5, seconds: 3.5 }, // 400 µm → 40 µm：晶粒
+          { toHeight: 2e-7, seconds: 2.5 }, // 晶粒內部：均勻色，快速掠過；原子於 ~70 nm 開始可辨
+          { toHeight: endHeight, seconds: 8 }, // 表面原子 → 區塊 → 晶胞 → 基元
+        ]
+      : [
+          { toHeight: 1.5e-3, seconds: 2 }, // 看見單晶外形，推向表面
+          { toHeight: 2e-7, seconds: 3.5 }, // 平坦表面：快速掠過；原子於 ~70 nm 開始可辨
+          { toHeight: endHeight, seconds: 8 },
+        ],
   }
+}
+
+export function ladderSeconds(profile: LadderProfile): number {
+  return profile.segments.reduce((sum, s) => sum + s.seconds, 0)
+}
+
+/** 時間（秒）→ zoom ∈ [0,1]：各段在對數空間內等速。 */
+export function zoomAtTime(profile: LadderProfile, time: number): number {
+  const total = log(profile.endHeight) - log(profile.startHeight)
+  let t = time
+  let from = profile.startHeight
+  for (const seg of profile.segments) {
+    if (t <= seg.seconds) {
+      const h = 10 ** (log(from) + (log(seg.toHeight) - log(from)) * (t / seg.seconds))
+      return clamp01((log(h) - log(profile.startHeight)) / total)
+    }
+    t -= seg.seconds
+    from = seg.toHeight
+  }
+  return 1
 }
 
 /**

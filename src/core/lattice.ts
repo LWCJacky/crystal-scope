@@ -17,15 +17,15 @@ function volumeFactorSq({ alpha, beta, gamma }: CellParams): number {
 export function validateCell(cell: CellParams): CellValidation {
   const { a, b, c, alpha, beta, gamma } = cell
   for (const [name, v] of [['a', a], ['b', b], ['c', c]] as const) {
-    if (!Number.isFinite(v) || v <= 0) return { valid: false, reason: `邊長 ${name} 必須大於 0` }
+    if (!Number.isFinite(v) || v <= 0) return { valid: false, reason: `Length ${name} must be greater than 0` }
   }
   for (const [name, v] of [['α', alpha], ['β', beta], ['γ', gamma]] as const) {
     if (!Number.isFinite(v) || v <= 0 || v >= 180) {
-      return { valid: false, reason: `夾角 ${name} 必須介於 0° 與 180° 之間` }
+      return { valid: false, reason: `Angle ${name} must lie between 0° and 180°` }
     }
   }
   if (volumeFactorSq(cell) <= MIN_VOLUME_FACTOR_SQ) {
-    return { valid: false, reason: '此角度組合無法形成有效的三維晶胞（體積為零或為負）' }
+    return { valid: false, reason: 'These angles do not form a valid three-dimensional cell (zero or negative volume)' }
   }
   return { valid: true }
 }

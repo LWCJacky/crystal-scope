@@ -18,8 +18,14 @@ export function wrapPosition([x, y, z]: Vec3): Vec3 {
   return [wrapFraction(x), wrapFraction(y), wrapFraction(z)]
 }
 
+/** 介面滑桿的範圍限制（1–5）；只在接受使用者輸入時使用，產生器本身接受任意正整數（尺度之旅需要 11³）。 */
 export function clampRepeat(n: number): number {
   return Math.min(MAX_REPEAT, Math.max(MIN_REPEAT, Math.round(n)))
+}
+
+/** 產生器用：至少 1 的整數。 */
+function countOf(n: number): number {
+  return Math.max(1, Math.round(n))
 }
 
 /**
@@ -34,7 +40,7 @@ export function generateImages(
   /** 區塊外側額外包含的晶胞層數；供「裁切至晶胞」把從外側侵入的球體也納入裁切。 */
   margin = 0,
 ): AtomImage[] {
-  const counts: Vec3 = [clampRepeat(repeat.repeatA), clampRepeat(repeat.repeatB), clampRepeat(repeat.repeatC)]
+  const counts: Vec3 = [countOf(repeat.repeatA), countOf(repeat.repeatB), countOf(repeat.repeatC)]
   const images: AtomImage[] = []
 
   for (const atom of atoms) {
@@ -84,7 +90,7 @@ export function generateLatticePoints(repeat: RepeatSettings, centering: Centeri
 
 /** 晶胞邊線端點對（分率座標），涵蓋整個 Na×Nb×Nc 區塊內所有晶胞邊。 */
 export function generateCellEdges(repeat: RepeatSettings): [Vec3, Vec3][] {
-  const n: Vec3 = [clampRepeat(repeat.repeatA), clampRepeat(repeat.repeatB), clampRepeat(repeat.repeatC)]
+  const n: Vec3 = [countOf(repeat.repeatA), countOf(repeat.repeatB), countOf(repeat.repeatC)]
   const edges: [Vec3, Vec3][] = []
   for (let axis = 0; axis < 3; axis++) {
     const [p, q] = [(axis + 1) % 3, (axis + 2) % 3]

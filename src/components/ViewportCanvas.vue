@@ -2,22 +2,29 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { directionVector, validateIndices } from '../core/direction'
 import { pieceCentroidAngle, pieceCount, pieceOutline, pieceSolid } from '../core/assembly'
-import { demoState, LADDER_DURATION } from '../core/demo'
+import { demoState } from '../core/demo'
 import { cellAngleMarks, formatDegrees } from '../core/angles'
-import { cubeHabit, octahedronHabit, parallelepipedHabit, polyhedronExtent, type Polyhedron } from '../core/habit'
+import { cubeHabit, parallelepipedHabit, polyhedronExtent, type Polyhedron } from '../core/habit'
 import { angleArc, hexagonalAxes, hexagonalHabit, hexPrismEdges } from '../core/hexagonal'
 import { cellClipPlanes, fracToCart } from '../core/lattice'
 import { findBonds } from '../core/neighbors'
 import { generateCellEdges, generateImages, generateLatticePoints, LATTICE_POINT_ID } from '../core/periodic'
-import { buildLadderProfile, formatLength, ladderState, scaleBar, type LadderProfile } from '../core/scaleLadder'
+import { centeringTranslations } from '../core/centering'
+import { wrapPosition } from '../core/periodic'
+import { BLOCK_CELLS, formatLength, ladderSeconds, ladderState, ROD_METRES_PER_UNIT, scaleBar, zoomAtTime, type LadderProfile } from '../core/scaleLadder'
 import type { AtomImage, RepeatSettings, Vec3 } from '../core/types'
 import { elementStyle } from '../data/elements'
 import { LATTICE_POINT_KINDS } from '../data/latticePointKinds'
+import type { LatticeSurfaceSpec } from '../render/latticeSurface'
 import { useDemo } from '../composables/useDemo'
 import { useReducedMotion } from '../composables/useReducedMotion'
+import { useI18n } from '../i18n'
 import {
+  type AtomInfo,
   CrystalRenderer,
   type LadderStageScene,
+  LADDER_VIEW_DIR,
+  type PickResult,
   type MacroObject,
   type SceneAtom,
   type SceneAxis,
@@ -27,6 +34,7 @@ import {
 } from '../render/CrystalRenderer'
 import { useStructureStore } from '../stores/structure'
 import { useUiStore, type ViewMode } from '../stores/ui'
+import AtomCard from './AtomCard.vue'
 
 const structure = useStructureStore()
 const ui = useUiStore()
@@ -42,11 +50,11 @@ const HABIT_COLOR = '#e3b23c'
 /** 夾角弧線與文字（與 120° 標示共用）。 */
 const ANGLE_LINE_COLOR = '#5b6cf0'
 const ANGLE_TEXT_COLOR = '#8f9cff'
-/** 尺度之旅：金屬棒與單晶外形的顏色。 */
+/** 尺度之旅：金屬棒的顏色；單晶外形使用原子的平均色，與表面晶格的實心面一致。 */
 const ROD_COLOR = '#9aa3ad'
-const CRYSTAL_COLOR = '#8fb8e8'
 
 const demo = useDemo()
+const { t, l, term } = useI18n()
 /** 六方柱模式（與 useDemo 共用同一判斷）。 */
 const prismActive = () => demo.prismActive.value
 const layers = () => structure.repeat.repeatC
@@ -99,12 +107,51 @@ function buildScene(over?: SceneOverrides): SceneData {
   const latticePointRadius = 0.06 * minLen
   const kindColor = (img: AtomImage, fallback: string) => (ui.colorByKind ? LATTICE_POINT_KINDS[img.kind].color : fallback)
 
+  const kindName = (img: AtomImage) => t(LATTICE_POINT_KINDS[img.kind].nameKey)
+  const latticePointInfo = (img: AtomImage): AtomInfo => ({
+    kind: 'latticePoint',
+    element: '',
+    elementZh: '',
+    // 與原子一致：顯示晶胞內的位置（扣除晶胞偏移）
+    frac: img.fractionalPosition.map((v, i) => v - img.offset[i]) as Vec3,
+    cellOffset: img.offset,
+    pointKind: img.kind,
+    isBoundaryImage: img.isBoundaryImage,
+    motifIndex: 0,
+    bondCount: 0,
+    note: t('info.latticePointNote', {
+      kind: kindName(img),
+      lattice: t(structure.lattice.nameKey),
+      symbol: structure.lattice.symbol,
+      n: structure.basis.length,
+    }),
+  })
+  const atomInfo = (img: AtomImage, atom: { id: string; element: string; positionLabel?: string }): AtomInfo => {
+    const index = structure.basis.findIndex((b) => b.id === atom.id) + 1
+    const style = elementStyle(atom.element)
+    const boundary = img.isBoundaryImage ? ` ${t('info.boundaryNote')}` : ''
+    return {
+      kind: 'atom',
+      element: atom.element,
+      elementZh: l(style.name),
+      frac: img.fractionalPosition.map((v, i) => v - img.offset[i]) as Vec3,
+      cellOffset: img.offset,
+      pointKind: img.kind,
+      isBoundaryImage: img.isBoundaryImage,
+      motifIndex: index,
+      positionLabel: atom.positionLabel,
+      bondCount: 0,
+      note: `${t('info.atomNote', { n: index, kind: kindName(img) })}${boundary}`,
+    }
+  }
+
   const latticePointAtom = (img: AtomImage, boundary = img.isBoundaryImage): SceneAtom => ({
     baseId: img.baseId,
     position: toCart(img.fractionalPosition),
     color: kindColor(img, LATTICE_POINT_COLOR),
     radius: latticePointRadius,
     isBoundaryImage: boundary,
+    info: latticePointInfo(img),
   })
 
   const atoms: SceneAtom[] = []
@@ -131,10 +178,14 @@ function buildScene(over?: SceneOverrides): SceneData {
   } else if (viewMode === 'motif') {
     // 一個晶格點（原點）＋與它關聯的基元原子，使用未折返的基元座標
     const origin: Vec3 = [0, 0, 0]
-    atoms.push({ baseId: LATTICE_POINT_ID, position: origin, color: LATTICE_POINT_COLOR, radius: latticePointRadius, isBoundaryImage: false })
+    const originImg: AtomImage = { baseId: LATTICE_POINT_ID, kind: 'corner', offset: [0, 0, 0], fractionalPosition: origin, latticePoint: origin, isBoundaryImage: false }
+    atoms.push({ baseId: LATTICE_POINT_ID, position: origin, color: LATTICE_POINT_COLOR, radius: latticePointRadius, isBoundaryImage: false, info: latticePointInfo(originImg) })
     for (const atom of structure.basis) {
       const position = toCart(atom.fractionalPosition)
-      atoms.push({ baseId: atom.id, position, color: elementStyle(atom.element).color, radius: radiusOf(atom.element), isBoundaryImage: false })
+      const img: AtomImage = { baseId: atom.id, kind: 'corner', offset: [0, 0, 0], fractionalPosition: atom.fractionalPosition, latticePoint: origin, isBoundaryImage: false }
+      const info = atomInfo(img, atom)
+      info.note = t('info.motifNote', { n: info.motifIndex })
+      atoms.push({ baseId: atom.id, position, color: elementStyle(atom.element).color, radius: radiusOf(atom.element), isBoundaryImage: false, info })
       bondCandidates.push({ element: atom.element, position })
       links.push([origin, position])
     }
@@ -149,6 +200,7 @@ function buildScene(over?: SceneOverrides): SceneData {
         radius: atom.displayRadius ?? radiusOf(atom.element),
         // 裁切模式以實心呈現被切開的部分；疊加關聯線時原子半透明，讓重合的晶格點（如 HCP 原點）可見
         isBoundaryImage: clipping ? false : showAssociation || img.isBoundaryImage,
+        info: atomInfo(img, atom),
       })
       bondCandidates.push({ element: atom.element, position })
       if (showAssociation) links.push([toCart(img.latticePoint), position])
@@ -157,7 +209,14 @@ function buildScene(over?: SceneOverrides): SceneData {
   }
 
   const rules = ui.showBonds && !contact ? (example.bonds ?? []) : []
-  const bonds = findBonds(bondCandidates, rules).map(([i, j]) => [bondCandidates[i].position, bondCandidates[j].position] as [Vec3, Vec3])
+  const bondPairs = findBonds(bondCandidates, rules)
+  // 每顆原子的鍵數（bondCandidates 與 atoms 中的原子依序對應，晶格點不在其中）
+  const atomsWithBonds = atoms.filter((a) => a.info?.kind === 'atom')
+  for (const [i, j] of bondPairs) {
+    if (atomsWithBonds[i]?.info) atomsWithBonds[i].info!.bondCount++
+    if (atomsWithBonds[j]?.info) atomsWithBonds[j].info!.bondCount++
+  }
+  const bonds = bondPairs.map(([i, j]) => [bondCandidates[i].position, bondCandidates[j].position] as [Vec3, Vec3])
 
   let arrow: SceneData['arrow'] = null
   const d = structure.direction
@@ -290,93 +349,122 @@ function applyDemoState() {
 
 // ───────────────────────── 尺度之旅 ─────────────────────────
 
-const BLOCK_CELLS = 5
 /** 金屬棒半徑 1 單位 = 1 cm；晶粒種子密度 200/單位 → 晶粒約 50 µm。 */
 const ROD_RADIUS = 1
 const ROD_LENGTH = 3
 const GRAIN_SEEDS_PER_UNIT = 200
-const ROD_METRES_PER_UNIT = 0.01
 const MACRO_SIZE_METRES = 0.02
-/** 預設視角方向（與渲染層一致）；巨觀物件朝向相機的一面須落在原點。 */
+/** 尺度之旅的視角方向（俯角約 51°，與渲染層一致）。 */
 const VIEW_DIR: Vec3 = (() => {
-  const v: Vec3 = [0.8, -1, 0.6]
+  const v = LADDER_VIEW_DIR
   const n = Math.hypot(...v)
   return [v[0] / n, v[1] / n, v[2] / n]
 })()
-const ROD_AXIS: Vec3 = [VIEW_DIR[0], VIEW_DIR[1], VIEW_DIR[2] + 0.4]
+/** 棒軸相對視線傾斜，起點時看得到側面，讀起來是「一根棒」而不是圓盤。 */
+const ROD_AXIS: Vec3 = [VIEW_DIR[0] + 0.35, VIEW_DIR[1], VIEW_DIR[2] - 0.25]
 
 interface LadderBuild {
   stages: LadderStageScene[]
   profile: LadderProfile
-  /** 原點晶格點在對齊後的位置（晶胞中心為原點），供相機目標插值。 */
-  cornerTarget: Vec3
-  polycrystalline: boolean
+  /** 相機目標：晶格各級由表面晶胞的中心（start）移到該晶胞的原點晶格點（end）。 */
+  targetStart: Vec3
+  targetEnd: Vec3
 }
 
-/** 巨觀單晶外形：依晶系選常見晶癖；中心在原點、尺寸約 2 單位。 */
-function macroHabit(): Polyhedron & { offsetZ: number } {
+function hexToRgb(hex: string): [number, number, number] {
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number]
+}
+
+/** 表面晶格的描述：晶胞內所有原子（含心型平移）、平均色作為實心面。 */
+function buildSurfaceSpec(polycrystalline: boolean): LatticeSurfaceSpec {
+  const basis = structure.latticeBasis
+  const minLen = Math.min(structure.cell.a, structure.cell.b, structure.cell.c)
+  const contact = ui.hardSphere && structure.source.hardSphere ? structure.nearestNeighbor / 2 : null
+  const atoms: LatticeSurfaceSpec['atoms'] = []
+  for (const atom of structure.basis) {
+    const style = elementStyle(atom.element)
+    const radius = contact ?? (atom.element === 'X' ? 0.12 * minLen : style.displayRadius) * ui.sphereScale
+    for (const { vector: t } of centeringTranslations(structure.lattice.centering)) {
+      const f = atom.fractionalPosition
+      atoms.push({ frac: wrapPosition([f[0] + t[0], f[1] + t[1], f[2] + t[2]]), radius, color: hexToRgb(style.color) })
+    }
+  }
+  const avg: [number, number, number] = [0, 0, 0]
+  for (const a of atoms) for (let i = 0; i < 3; i++) avg[i] += a.color[i] / atoms.length
+  const solidColor = polycrystalline ? ROD_COLOR : `#${avg.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`
+  return { basis, atoms, solidColor, solidLit: !polycrystalline }
+}
+
+/**
+ * 巨觀單晶外形：頂面必須是晶格的 ab 面（表面晶格鋪在其上）。
+ * 立方晶系用立方體（{100} 面），六方用六方柱（頂面 (0001)），其餘用與晶胞同形的平行六面體。
+ * 回傳的 topCentre 為頂面中心（相機推進的目標）。
+ */
+function macroHabit(): Polyhedron & { topCentre: Vec3 } {
   const basis = structure.latticeBasis
   const system = structure.systemId
-  const id = structure.exampleId
   if (system === 'hexagonal') {
     const h = hexagonalHabit(basis, 1)
-    return { ...h, offsetZ: -basis.c[2] / 2 }
+    const top = Math.max(...h.vertices.map((v) => v[2]))
+    // 六方柱＋雙錐：頂面取柱體的上底（錐尖以下）
+    const ring = h.vertices.filter((v) => Math.abs(v[2] - basis.c[2] * 1 - Math.hypot(...basis.a) * 1.18 * 0.12) < 1e-6)
+    const topZ = ring.length ? ring[0][2] : top
+    return { ...h, topCentre: [0, 0, topZ] }
   }
-  if (system === 'cubic') return { ...(id === 'diamond' ? octahedronHabit(2) : cubeHabit(2)), offsetZ: 0 }
+  if (system === 'cubic') return { ...cubeHabit(2), topCentre: [0, 0, 1] }
   const raw = parallelepipedHabit(basis, 1)
-  return { ...parallelepipedHabit(basis, 2 / polyhedronExtent(raw)), offsetZ: 0 }
+  const scale = 2 / polyhedronExtent(raw)
+  const p = parallelepipedHabit(basis, scale)
+  const c = basis.c.map((v) => (v * scale) / 2) as Vec3
+  return { ...p, topCentre: c }
 }
 
 function buildLadder(): LadderBuild {
   const basis = structure.latticeBasis
   const toCart = (f: Vec3) => fracToCart(basis, f)
-  // 示意晶系的晶胞長度沒有單位，比例尺以 1 單位 = 1 Å 計算並註明
-  const cellMetres = structure.cell.a * 1e-10
   const polycrystalline = !!structure.source.polycrystalline
 
+  const surface = buildSurfaceSpec(polycrystalline)
   let macro: MacroObject
   let macroOffset: Vec3 = [0, 0, 0]
   let macroMetresPerUnit: number
   if (polycrystalline) {
-    // 棒軸相對視線傾斜約 22°，起點時看得到側面，讀起來是「一根棒」而不是圓盤
     macro = { kind: 'rod', radius: ROD_RADIUS, length: ROD_LENGTH, seedsPerUnit: GRAIN_SEEDS_PER_UNIT, axis: ROD_AXIS, color: ROD_COLOR }
     macroMetresPerUnit = ROD_METRES_PER_UNIT
   } else {
     const habit = macroHabit()
-    macro = { kind: 'solid', polyhedron: habit, color: CRYSTAL_COLOR }
-    // 相機沿 VIEW_DIR 推向原點：把外形最靠近相機的頂點移到原點，相機才會貼近表面而不是進入內部
-    let support = -Infinity
-    let supportPoint: Vec3 = [0, 0, 0]
-    for (const v of habit.vertices) {
-      const q: Vec3 = [v[0], v[1], v[2] + habit.offsetZ]
-      const dot = q[0] * VIEW_DIR[0] + q[1] * VIEW_DIR[1] + q[2] * VIEW_DIR[2]
-      if (dot > support) {
-        support = dot
-        supportPoint = q
-      }
-    }
-    macroOffset = [-supportPoint[0], -supportPoint[1], habit.offsetZ - supportPoint[2]]
+    // 外形顏色 = 表面晶格實心面的顏色（原子平均色），兩級交接時無縫
+    macro = { kind: 'solid', polyhedron: habit, color: surface.solidColor }
+    // 相機推向頂面（ab 面）的中心：表面晶格鋪在這個面上
+    macroOffset = [-habit.topCentre[0], -habit.topCentre[1], -habit.topCentre[2]]
     macroMetresPerUnit = MACRO_SIZE_METRES / polyhedronExtent(habit)
   }
 
-  const half = BLOCK_CELLS / 2
-  const cellCentre = toCart([0.5, 0.5, 0.5])
-  const neg = (v: Vec3): Vec3 => [-v[0], -v[1], -v[2]]
+  /**
+   * 晶格各級的座標約定：晶體表面為平面 z = 0，原點是表面上的一個晶格點；
+   * 表面晶胞為分率 [0,1]×[0,1]×[−1,0]（頂面與表面齊平），其原點晶格點在 (0,0,−1)。
+   */
+  const half = Math.floor(BLOCK_CELLS / 2)
+  const belowOne = toCart([0, 0, -1])
   const lattice = (viewMode: ViewMode, repeat: number, boundary: boolean, axes: boolean): SceneData =>
     buildScene({ viewMode, repeat: [repeat, repeat, repeat], boundaryImages: boundary, showAxes: axes, showAngles: axes, showCellEdges: true })
+  // 剖面的巨觀單位需與實際使用的物件一致（金屬棒 vs. 單晶外形）
+  const profile = { ...demo.ladderProfile.value }
+  profile.stages = profile.stages.map((st) => (st.id === 'macro' ? { ...st, metresPerUnit: macroMetresPerUnit } : st))
 
   return {
     stages: [
       { id: 'macro', macro, offset: macroOffset },
-      // 區塊中心與中央晶胞的中心重合：5 格時中央晶胞 [2,3] 的中心正是 2.5
-      { id: 'block', data: lattice('structure', BLOCK_CELLS, false, false), offset: neg(toCart([half, half, half])) },
-      { id: 'cell', data: lattice('structure', 1, true, true), offset: neg(cellCentre) },
+      { id: 'field', surface, offset: [0, 0, 0] },
+      // 11³ 區塊：頂面與表面齊平，晶胞 [5,6]×[5,6]×[10,11] 對到表面晶胞
+      { id: 'block', data: lattice('structure', BLOCK_CELLS, false, false), offset: toCart([-half, -half, -BLOCK_CELLS]) },
+      { id: 'cell', data: lattice('structure', 1, true, true), offset: belowOne },
       // 基元級只保留晶胞邊線；座標軸與夾角由晶胞級負責並在此前淡出，避免兩級重疊時標籤疊加
-      { id: 'motif', data: lattice('motif', 1, false, false), offset: neg(cellCentre) },
+      { id: 'motif', data: lattice('motif', 1, false, false), offset: belowOne },
     ],
-    profile: buildLadderProfile(cellMetres, macroMetresPerUnit),
-    cornerTarget: neg(cellCentre),
-    polycrystalline,
+    profile,
+    targetStart: toCart([0.5, 0.5, -0.5]),
+    targetEnd: belowOne,
   }
 }
 
@@ -387,40 +475,112 @@ const hostHeight = ref(600)
 
 function applyLadder() {
   if (!ladder || !renderer) return
-  const zoom = Math.min(1, Math.max(0, ui.demoTime / LADDER_DURATION))
+  const zoom = zoomAtTime(ladder.profile, ui.demoTime)
   const state = ladderState(ladder.profile, zoom, reducedMotion.value)
   const t = state.targetBlend
-  const latticeTarget = ladder.cornerTarget.map((c) => c * t) as Vec3
-  renderer.setLadderView({ stages: state.stages, latticeTarget })
+  const latticeTarget = ladder.targetStart.map((v, i) => v + (ladder!.targetEnd[i] - v) * t) as Vec3
+  // 表面的實心面在區塊階段仍保留（周圍不會提早變黑），原子則依 field 的淡出
+  const blockOpacity = state.stages.find((st) => st.id === 'block')?.opacity ?? 0
+  const stages = state.stages.map((st) =>
+    st.id === 'field' ? { ...st, atomOpacity: st.opacity, opacity: Math.max(st.opacity, blockOpacity) } : st,
+  )
+  renderer.setLadderView({ stages, latticeTarget })
   ladderHeightMetres.value = state.heightMetres
   // 說明文字取「最靠近原子尺度且已明顯可見」的一級
   ladderStageId.value = [...state.stages].reverse().find((s) => s.opacity >= 0.5)?.id ?? 'macro'
 }
 
-const STAGE_NAMES: Record<string, string> = {
-  macro: '巨觀物件',
-  block: '週期晶格（5×5×5 晶胞）',
-  cell: '單一晶胞',
-  motif: '晶格點 + 基元',
-}
+const stageName = (id: string) =>
+  id === 'macro'
+    ? t('ladder.stageMacro')
+    : id === 'field'
+      ? t('ladder.stageField')
+      : id === 'block'
+        ? t('ladder.stageBlock', { n: BLOCK_CELLS })
+        : id === 'cell'
+          ? t('ladder.stageCell')
+          : t('ladder.stageMotif')
 const scaleBarInfo = computed(() => {
   const h = ladderHeightMetres.value
   if (!h) return null
   const bar = scaleBar(h)
   return { label: formatLength(bar.metres), widthPx: bar.fraction * hostHeight.value, height: formatLength(h) }
 })
+// 說明文字依「目前範例」即時更新（不可讀取非響應式的 ladder 變數，否則切換範例後會顯示上一個範例的文字）
+const polycrystalline = computed(() => !!structure.source.polycrystalline)
 const ladderCaption = computed(() => {
-  const stage = STAGE_NAMES[ladderStageId.value]
+  const stage = stageName(ladderStageId.value)
   if (ladderStageId.value !== 'macro') return stage
-  return ladder?.polycrystalline ? `${stage}：切開的多晶金屬棒，切面可見晶粒` : `${stage}：單晶外形`
+  return polycrystalline.value ? t('ladder.macroPoly', { stage }) : t('ladder.macroSingle', { stage })
 })
 const ladderCaveat = computed(() =>
   structure.source.lengthUnit === 'Å'
-    ? ladder?.polycrystalline
-      ? '晶粒大小與方位為假想示意；晶格以下為真實比例。'
-      : '巨觀外形為理想化示意；晶格以下為真實比例。'
-    : '示意晶胞無真實尺寸，比例尺以 1 單位 = 1 Å 計算。',
+    ? polycrystalline.value
+      ? t('ladder.caveatPoly')
+      : t('ladder.caveatSingle')
+    : t('ladder.caveatSchematic'),
 )
+
+// ───────────────────────── 原子懸停資訊卡 ─────────────────────────
+
+const hovered = ref<PickResult | null>(null)
+const hoverSide = ref<'right' | 'left'>('right')
+const hoverColor = computed(() => hovered.value?.atom.color ?? '')
+let hoverFrame = 0
+let lastPointer: [number, number] | null = null
+/**
+ * 目前懸停的原子（非響應式）。比較與清除都用這個變數，不讀 hovered.value：
+ * clearHover 會在重建場景的 watchEffect 內被呼叫，讀取 ref 會讓 effect 追蹤懸停狀態，
+ * 導致每次懸停都觸發重建並立刻清除。
+ */
+let currentAtom: SceneAtom | null = null
+
+function setHovered(hit: PickResult | null) {
+  const atom = hit?.atom ?? null
+  if (atom === currentAtom) {
+    if (hit) hovered.value = hit
+    return
+  }
+  currentAtom = atom
+  renderer?.setHighlight(atom)
+  hovered.value = hit
+}
+
+/** 指標移動：每格最多挑選一次（挑選需光線投射）。 */
+function onPointerMove(e: PointerEvent) {
+  if (e.pointerType === 'touch') return
+  const rect = host.value!.getBoundingClientRect()
+  lastPointer = [e.clientX - rect.left, e.clientY - rect.top]
+  if (hoverFrame) return
+  hoverFrame = requestAnimationFrame(() => {
+    hoverFrame = 0
+    if (!lastPointer) return
+    const hit = renderer?.pick(lastPointer[0], lastPointer[1]) ?? null
+    if (hit) hoverSide.value = hit.screen[0] > rect.width - 300 ? 'left' : 'right'
+    setHovered(hit)
+  })
+}
+
+/** 觸控：點一下顯示該原子的資訊，點空白處關閉。 */
+function onPointerDown(e: PointerEvent) {
+  if (e.pointerType !== 'touch') return
+  const rect = host.value!.getBoundingClientRect()
+  const hit = renderer?.pick(e.clientX - rect.left, e.clientY - rect.top) ?? null
+  if (hit) hoverSide.value = hit.screen[0] > rect.width - 300 ? 'left' : 'right'
+  setHovered(hit)
+}
+
+function clearHover() {
+  lastPointer = null
+  if (!currentAtom) return
+  setHovered(null)
+}
+
+/** 每次繪製後讓資訊卡跟著球體（自轉、旋轉時）。 */
+function followHovered() {
+  if (!currentAtom || !renderer) return
+  hovered.value = renderer.projectAtom(currentAtom)
+}
 
 /** 滾輪在尺度之旅中改為推進／後退放大（取代相機縮放）。 */
 function onWheel(e: WheelEvent) {
@@ -428,8 +588,9 @@ function onWheel(e: WheelEvent) {
   e.preventDefault()
   ui.demoPlaying = false
   ui.demoOn = true
-  const step = (e.deltaY / 1000) * (LADDER_DURATION / 8)
-  ui.demoTime = Math.min(LADDER_DURATION, Math.max(0, ui.demoTime + step))
+  const total = ladderSeconds(demo.ladderProfile.value)
+  const step = (e.deltaY / 1000) * (total / 8)
+  ui.demoTime = Math.min(total, Math.max(0, ui.demoTime + step))
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -452,6 +613,10 @@ onMounted(() => {
   const sizeObserver = new ResizeObserver(() => (hostHeight.value = host.value?.clientHeight ?? 600))
   sizeObserver.observe(host.value!)
   host.value!.addEventListener('wheel', onWheel, { passive: false })
+  host.value!.addEventListener('pointermove', onPointerMove)
+  host.value!.addEventListener('pointerdown', onPointerDown)
+  host.value!.addEventListener('pointerleave', clearHover)
+  renderer.onRendered = followHovered
 
   // 於 renderer 建立後才開始追蹤；任何結構或顯示設定變動都會重建場景
   watchEffect(() => {
@@ -463,6 +628,7 @@ onMounted(() => {
       queueMicrotask(applyLadder)
       return
     }
+    clearHover()
     renderer?.update(buildScene())
     // 重建場景後套用目前的演示狀態；放進 microtask，讓時間不被此 effect 追蹤，避免每格重建場景
     if (demo.running.value) queueMicrotask(applyDemoState)
@@ -497,7 +663,15 @@ onMounted(() => {
     () => ui.autoRotating,
     (on) => renderer?.setAutoRotate(on),
   )
-  renderer.onUserInteract = () => (ui.autoRotating = false)
+  renderer.onUserInteract = () => {
+    ui.autoRotating = false
+    clearHover()
+  }
+  watch(
+    () => ui.projection,
+    (mode) => renderer?.setProjection(mode),
+    { immediate: true },
+  )
   watch(
     () => ui.autoRotateSeconds,
     (sec) => renderer?.setAutoRotateSeconds(sec),
@@ -520,7 +694,11 @@ onMounted(() => {
 
   onBeforeUnmount(() => {
     sizeObserver.disconnect()
+    cancelAnimationFrame(hoverFrame)
     host.value?.removeEventListener('wheel', onWheel)
+    host.value?.removeEventListener('pointermove', onPointerMove)
+    host.value?.removeEventListener('pointerdown', onPointerDown)
+    host.value?.removeEventListener('pointerleave', clearHover)
   })
 })
 
@@ -531,16 +709,24 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="host" class="viewport" aria-label="3D 晶體模型檢視區">
+  <div ref="host" class="viewport" :aria-label="t('viewport.aria')">
+    <AtomCard
+      :info="hovered?.atom.info ?? null"
+      :x="hovered?.screen[0] ?? 0"
+      :y="hovered?.screen[1] ?? 0"
+      :radius="hovered?.screenRadius ?? 0"
+      :side="hoverSide"
+      :color="hoverColor"
+    />
     <!-- 尺度之旅的比例尺：長度隨放大連續變化，是整段動畫的教學核心 -->
     <Transition name="fade">
       <div v-if="scaleBarInfo" class="scalebar" aria-live="polite">
-        <p class="eyebrow">尺度之旅 · {{ ladderCaption }}</p>
+        <p class="eyebrow">{{ term('scaleJourney') }} · {{ ladderCaption }}</p>
         <div class="bar-row">
           <span class="bar" :style="{ width: `${scaleBarInfo.widthPx}px` }" />
           <span class="bar-label">{{ scaleBarInfo.label }}</span>
         </div>
-        <p class="fov">視野高度 ≈ {{ scaleBarInfo.height }}</p>
+        <p class="fov">{{ t('ladder.fov', { h: scaleBarInfo.height }) }}</p>
         <p class="caveat">{{ ladderCaveat }}</p>
       </div>
     </Transition>

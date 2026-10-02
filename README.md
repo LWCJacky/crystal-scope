@@ -2,7 +2,7 @@
 
 以 Vue 建構的開源互動晶體結構觀察室：透過 3D 模型、晶胞動畫與參數控制，探索七大晶系及原子排列。
 
-> 已完成：七大晶系與 14 種布拉菲晶格、10 個教學結構範例、晶格點／基元／結構三視圖、硬球模型與晶胞裁切、六方柱四軸與拼裝動畫、自動演示與導覽、尺度之旅（由 4 cm 的物件連續放大到晶胞）。尚未完成：原子分率座標編輯、晶胞參數編輯、晶向 [uvw] 介面（見方案 M1–M3）。實作方案見 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)，概念規劃見 [`LatticeLab_Project_Plan.md`](LatticeLab_Project_Plan.md)。
+> 已完成：繁中／英／日三語介面（專業名詞附英文原文）、七大晶系與 14 種布拉菲晶格、10 個教學結構範例、晶格點／基元／結構三視圖、硬球模型與晶胞裁切、六方柱四軸與拼裝動畫、自動演示與導覽、尺度之旅（由 4 cm 的物件連續放大到晶胞）。尚未完成：原子分率座標編輯、晶胞參數編輯、晶向 [uvw] 介面（見方案 M1–M3）。實作方案見 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)，概念規劃見 [`LatticeLab_Project_Plan.md`](LatticeLab_Project_Plan.md)。
 
 ## 開發
 
@@ -23,6 +23,7 @@ BASE_PATH=/crystal-scope/ npm run build   # GitHub Pages 子路徑
 | `src/render/` | Three.js 渲染層（按需重繪、實例化球體） |
 | `src/stores/` | Pinia：結構與歷史紀錄、介面設定 |
 | `src/components/` | Vue 介面 |
+| `src/i18n/` | 多語訊息表（zh-TW／en／ja）、專業名詞表與 `useI18n()` |
 
 ## 限制
 

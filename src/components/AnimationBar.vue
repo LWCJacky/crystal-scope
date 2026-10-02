@@ -2,19 +2,21 @@
 import { computed } from 'vue'
 import { playDemo, useDemo } from '../composables/useDemo'
 import { useUiStore } from '../stores/ui'
+import { useI18n } from '../i18n'
 
 const ui = useUiStore()
 const { kind, duration } = useDemo()
+const { t, term } = useI18n()
 
 const active = computed(() => kind.value !== null)
 const title = computed(() =>
   kind.value === 'ladder'
-    ? '尺度之旅：公分 → 晶粒 → 晶格 → 晶胞'
+    ? t('bar.titleLadder')
     : kind.value === 'assembly'
-      ? '拼裝六方柱'
+      ? t('bar.titleAssembly')
       : kind.value === 'build'
-        ? '建構：晶格點 → 基元 → 結構'
-        : '基元視圖無演示',
+        ? t('bar.titleBuild')
+        : t('bar.titleNone'),
 )
 
 /** 進入／離開尺度之旅；進入時立即從公分尺度開始播放。 */
@@ -43,17 +45,17 @@ function scrub(e: Event) {
 </script>
 
 <template>
-  <footer class="animation-bar" aria-label="演示動畫控制">
+  <footer class="animation-bar" :aria-label="t('bar.aria')">
     <div class="title">
-      <p class="eyebrow">演示</p>
+      <p class="eyebrow">{{ term('demo') }}</p>
       <span>{{ title }}</span>
     </div>
-    <button data-tour="ladder" :aria-pressed="ui.ladderOn" title="由巨觀物件連續放大到晶胞（滾輪可推進）" @click="toggleLadder">
-      {{ ui.ladderOn ? '離開尺度之旅' : '尺度之旅' }}
+    <button data-tour="ladder" :aria-pressed="ui.ladderOn" :title="t('bar.ladderTitle')" @click="toggleLadder">
+      {{ ui.ladderOn ? t('bar.ladderExit') : term('scaleJourney') }}
     </button>
-    <button :disabled="!active" @click="togglePlay">{{ ui.demoPlaying ? '暫停' : '播放' }}</button>
-    <button :disabled="!active" @click="playDemo">重播</button>
-    <button :disabled="!active || !ui.demoOn || ui.demoTime >= duration" @click="skip">跳到結果</button>
+    <button :disabled="!active" @click="togglePlay">{{ ui.demoPlaying ? t('bar.pause') : t('bar.play') }}</button>
+    <button :disabled="!active" @click="playDemo">{{ t('bar.replay') }}</button>
+    <button :disabled="!active || !ui.demoOn || ui.demoTime >= duration" @click="skip">{{ t('bar.skip') }}</button>
     <input
       class="progress"
       type="range"
@@ -62,11 +64,11 @@ function scrub(e: Event) {
       step="0.01"
       :value="ui.demoOn ? ui.demoTime : duration"
       :disabled="!active"
-      aria-label="演示進度"
+      :aria-label="t('bar.progress')"
       @input="scrub"
     />
     <output class="time">{{ (ui.demoOn ? ui.demoTime : duration).toFixed(1) }} / {{ duration.toFixed(1) }} s</output>
-    <div class="segmented" role="group" aria-label="速度">
+    <div class="segmented" role="group" :aria-label="t('bar.speed')">
       <button
         v-for="s in SPEEDS"
         :key="s"
@@ -78,9 +80,9 @@ function scrub(e: Event) {
       </button>
     </div>
     <div class="prefs">
-      <label><input v-model="ui.autoplay" type="checkbox" /> 點選範例時自動播放</label>
-      <label title="拖曳模型即停止；偏好減少動態效果時不旋轉">
-        <input v-model="ui.autoRotatePref" type="checkbox" /> 完成後自動旋轉
+      <label><input v-model="ui.autoplay" type="checkbox" /> {{ t('bar.autoplay') }}</label>
+      <label :title="t('bar.autoRotateTitle')">
+        <input v-model="ui.autoRotatePref" type="checkbox" /> {{ t('bar.autoRotate') }}
       </label>
     </div>
   </footer>

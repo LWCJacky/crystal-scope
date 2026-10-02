@@ -4,9 +4,14 @@ import { useStructureStore } from '../stores/structure'
 import { useUiStore } from '../stores/ui'
 import ModuleIcon from './icons/ModuleIcon.vue'
 import SettingsDialog from './SettingsDialog.vue'
+import { useI18n } from '../i18n'
+import { LOCALES } from '../i18n/types'
+import { useSettingsStore } from '../stores/settings'
 
 const structure = useStructureStore()
 const ui = useUiStore()
+const settings = useSettingsStore()
+const { t } = useI18n()
 const settingsDialog = ref<InstanceType<typeof SettingsDialog>>()
 
 function reset() {
@@ -21,21 +26,33 @@ function reset() {
       <span class="icon-tile logo"><ModuleIcon name="crystal" /></span>
       <div>
         <h1 class="title">CrystalScope</h1>
-        <p class="sub">晶體結構觀察室</p>
+        <p class="sub">{{ t('app.subtitle') }}</p>
       </div>
     </div>
     <nav class="actions">
-      <div class="segmented" role="group" aria-label="模式">
-        <button :aria-pressed="ui.mode === 'explore'" @click="ui.mode = 'explore'">探索</button>
-        <button :aria-pressed="ui.mode === 'presentation'" @click="ui.mode = 'presentation'">投影</button>
+      <div class="segmented" role="group" :aria-label="t('header.mode')">
+        <button :aria-pressed="ui.mode === 'explore'" @click="ui.mode = 'explore'">{{ t('header.explore') }}</button>
+        <button :aria-pressed="ui.mode === 'presentation'" @click="ui.mode = 'presentation'">{{ t('header.presentation') }}</button>
       </div>
       <span class="divider" aria-hidden="true" />
-      <button class="ghost" :disabled="!structure.canUndo" title="復原 Undo" @click="structure.undo()">復原</button>
-      <button class="ghost" :disabled="!structure.canRedo" title="重做 Redo" @click="structure.redo()">重做</button>
-      <button title="還原範例並重置視角" @click="reset">重置</button>
+      <button class="ghost" :disabled="!structure.canUndo" :title="`${t('header.undo')} (Undo)`" @click="structure.undo()">{{ t('header.undo') }}</button>
+      <button class="ghost" :disabled="!structure.canRedo" :title="`${t('header.redo')} (Redo)`" @click="structure.redo()">{{ t('header.redo') }}</button>
+      <button :title="t('header.resetTitle')" @click="reset">{{ t('header.reset') }}</button>
       <span class="divider" aria-hidden="true" />
-      <button data-tour="settings" title="共用設定（以 cookie 保存）" @click="settingsDialog?.open()">設定</button>
-      <button data-tour="help" class="primary" title="開啟使用導覽" @click="ui.openTour()">說明</button>
+      <div class="segmented" role="group" :aria-label="t('header.language')" data-tour="language">
+        <button
+          v-for="l in LOCALES"
+          :key="l.id"
+          :lang="l.htmlLang"
+          :aria-pressed="settings.values.locale === l.id"
+          @click="settings.values.locale = l.id"
+        >
+          {{ l.label }}
+        </button>
+      </div>
+      <span class="divider" aria-hidden="true" />
+      <button data-tour="settings" :title="t('header.settingsTitle')" @click="settingsDialog?.open()">{{ t('header.settings') }}</button>
+      <button data-tour="help" class="primary" :title="t('header.helpTitle')" @click="ui.openTour()">{{ t('header.help') }}</button>
     </nav>
     <SettingsDialog ref="settingsDialog" />
   </header>

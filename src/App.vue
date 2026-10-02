@@ -6,11 +6,21 @@ import GuideTour from './components/GuideTour.vue'
 import SystemList from './components/SystemList.vue'
 import ViewportCanvas from './components/ViewportCanvas.vue'
 import { useDemoClock } from './composables/useDemoClock'
-import { onMounted } from 'vue'
+import { onMounted, watchEffect } from 'vue'
+import { useI18n } from './i18n'
+import { LOCALES } from './i18n/types'
 import { useUiStore } from './stores/ui'
 
 const ui = useUiStore()
+const { t, locale } = useI18n()
 useDemoClock()
+
+// 介面語言：同步 <html lang>、頁面標題與 meta 描述
+watchEffect(() => {
+  document.documentElement.lang = LOCALES.find((l) => l.id === locale.value)?.htmlLang ?? 'en'
+  document.title = `CrystalScope｜${t('app.subtitle')}`
+  document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.description'))
+})
 
 // 第一次造訪：先讓預設範例的建構動畫播一段，再開啟導覽
 onMounted(() => {

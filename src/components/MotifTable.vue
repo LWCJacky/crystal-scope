@@ -5,8 +5,10 @@ import { elementStyle } from '../data/elements'
 import { LATTICE_POINT_KINDS } from '../data/latticePointKinds'
 import { useStructureStore } from '../stores/structure'
 import { formatPosition } from '../utils/format'
+import { useI18n } from '../i18n'
 
 const structure = useStructureStore()
+const { termParts } = useI18n()
 
 const translations = computed(() => centeringTranslations(structure.lattice.centering))
 </script>
@@ -16,8 +18,8 @@ const translations = computed(() => centeringTranslations(structure.lattice.cent
   <table class="motif-table">
     <thead>
       <tr>
-        <th>晶格點 <span class="en">Lattice point</span></th>
-        <th>基元 <span class="en">Motif</span></th>
+        <th>{{ termParts('latticePoint').label }} <span v-if="termParts('latticePoint').en" class="en">{{ termParts('latticePoint').en }}</span></th>
+        <th>{{ termParts('motif').label }} <span v-if="termParts('motif').en" class="en">{{ termParts('motif').en }}</span></th>
       </tr>
     </thead>
     <tbody>

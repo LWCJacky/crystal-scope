@@ -1,12 +1,15 @@
 import type { Centering } from '../core/centering'
 import type { BasisAtom, CellParams, CrystalSystemId } from '../core/types'
+import type { L10n } from '../i18n/types'
 
 /** 布拉菲晶格類型；七大晶系合計 14 種。 */
 export interface BravaisLattice {
   /** 皮爾遜符號，例如 cF。 */
   symbol: string
   centering: Centering
-  nameZh: string
+  /** 心型名稱的訊息鍵（lattice.P／C／I／F／R）。 */
+  nameKey: 'lattice.P' | 'lattice.C' | 'lattice.I' | 'lattice.F' | 'lattice.R'
+  /** 英文原文（專業名詞）。 */
   nameEn: string
 }
 
@@ -18,7 +21,7 @@ export interface MotifParameter {
   step: number
   /** 參考文獻值；偏離時結構標示為自訂。 */
   default: number
-  note: string
+  note: L10n
 }
 
 /** 鍵／最近鄰連線規則：兩元素間距離 ≤ maxDistance 才連線（單位同晶胞長度）。 */
@@ -34,13 +37,14 @@ export interface StructureExample {
   /** system：七大晶系示意晶胞；material：投影片中的真實材料範例。 */
   group: 'system' | 'material'
   systemId: CrystalSystemId
-  nameZh: string
+  /** 在地化名稱；nameEn 為英文原文（專業名詞）。 */
+  name: L10n
   nameEn: string
   /** 本範例採用的晶胞設定（必須明示，尤其三方晶系）。 */
-  cellSetting: string
+  cellSetting: L10n
   /** 典型幾何關係的文字描述。 */
-  relations: string
-  description: string
+  relations: L10n
+  description: L10n
   /** 可選的布拉菲晶格，第一個為預設；材料範例只有一個。 */
   lattices: BravaisLattice[]
   cell: CellParams
@@ -54,7 +58,7 @@ export interface StructureExample {
   /** 多晶材料（金屬）：尺度之旅的巨觀物件為切開的金屬棒，切面顯示晶粒；否則以單晶外形呈現。 */
   polycrystalline?: boolean
   /** 資料來源或近似說明。 */
-  reference?: string
+  reference?: L10n
 }
 
 export function defaultParams(example: StructureExample): MotifParams {

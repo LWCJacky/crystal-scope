@@ -2,9 +2,29 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { Polyhedron } from '../core/habit'
 import type { ClipPlane } from '../core/lattice'
+import type { LatticePointKind } from '../core/centering'
 import type { LadderStageId } from '../core/scaleLadder'
 import type { Vec3 } from '../core/types'
 import { createGrainMaterial } from './grainMaterial'
+import { LatticeSurface, type LatticeSurfaceSpec } from './latticeSurface'
+
+/** 懸停資訊卡的內容：由檢視區組裝，渲染層只負責挑選與投影。 */
+export interface AtomInfo {
+  kind: 'atom' | 'latticePoint'
+  element: string
+  elementZh: string
+  /** 分率座標（含晶胞偏移前的基元座標）。 */
+  frac: Vec3
+  cellOffset: Vec3
+  pointKind: LatticePointKind
+  isBoundaryImage: boolean
+  /** 基元中的序號（1 起）；晶格點為 0。 */
+  motifIndex: number
+  positionLabel?: string
+  bondCount: number
+  /** 依結構產生的一句說明。 */
+  note: string
+}
 
 export interface SceneAtom {
   baseId: string
@@ -12,6 +32,15 @@ export interface SceneAtom {
   color: string
   radius: number
   isBoundaryImage: boolean
+  info?: AtomInfo
+}
+
+export interface PickResult {
+  atom: SceneAtom
+  /** 球心在畫面上的位置（相對於畫布左上角，CSS 像素）。 */
+  screen: [number, number]
+  /** 球在畫面上的半徑（CSS 像素），供資訊卡的引線避開球體。 */
+  screenRadius: number
 }
 
 export interface SceneArrow {
@@ -109,23 +138,25 @@ export type MacroObject =
   | { kind: 'rod'; radius: number; length: number; seedsPerUnit: number; axis: Vec3; color: string }
   | { kind: 'solid'; polyhedron: Polyhedron; color: string }
 
-/** 尺度之旅的一級場景：一般場景資料或巨觀物件，offset 讓各級的對齊點落在原點。 */
+/** 尺度之旅的一級場景：一般場景資料、巨觀物件或 GPU 表面晶格，offset 讓各級的對齊點落在原點。 */
 export interface LadderStageScene {
   id: LadderStageId
   data?: SceneData
   macro?: MacroObject
+  surface?: LatticeSurfaceSpec
   offset: Vec3
 }
 
 export interface LadderView {
-  stages: { id: LadderStageId; opacity: number; viewHeightUnits: number }[]
+  /** atomOpacity：表面晶格的原子不透明度（實心面則用 opacity，可比原子晚淡出）。 */
+  stages: { id: LadderStageId; opacity: number; viewHeightUnits: number; atomOpacity?: number }[]
   /** 晶格各級（block／cell／motif）共用的相機目標（場景單位）。 */
   latticeTarget: Vec3
 }
 
 const ORIGIN = new THREE.Vector3()
-/** 預設斜視角方向（與 resetView 一致）。 */
-const DEFAULT_VIEW_DIR = new THREE.Vector3(0.8, -1, 0.6).normalize()
+/** 尺度之旅的視角：俯角約 51°，從上方推向晶體表面，近處畫面不會被表面上的遠端邊緣佔據。 */
+export const LADDER_VIEW_DIR: Vec3 = [0.5, -0.6, 1.0]
 
 /**
  * Three.js 場景封裝。採按需重繪：只有相機或資料改變時才 render。
@@ -136,6 +167,9 @@ export class CrystalRenderer {
   private readonly renderer: THREE.WebGLRenderer
   private readonly scene = new THREE.Scene()
   private readonly camera: THREE.PerspectiveCamera
+  private readonly ortho: THREE.OrthographicCamera
+  /** 一般檢視使用的相機（透視或正交）；尺度之旅一律用透視相機。 */
+  private active: THREE.Camera
   private readonly controls: OrbitControls
   private readonly content = new THREE.Group()
   private readonly resizeObserver: ResizeObserver
@@ -147,6 +181,10 @@ export class CrystalRenderer {
   private autoRotateFrame = 0
   /** 使用者開始拖曳／縮放相機時呼叫（用於停止自轉）。 */
   onUserInteract: (() => void) | null = null
+  /** 每次繪製完成後呼叫（懸停資訊卡用來跟著球體移動）。 */
+  onRendered: (() => void) | null = null
+  private readonly raycaster = new THREE.Raycaster()
+  private highlighted: { mesh: THREE.InstancedMesh; index: number; color: THREE.Color } | null = null
   private pieceGroups: { group: THREE.Group; edge: THREE.Material; face: THREE.Material; centroidAngle: number }[] = []
   private atomLayerMaterials: THREE.Material[] = []
   private latticeLayerMaterials: THREE.Material[] = []
@@ -157,6 +195,7 @@ export class CrystalRenderer {
   /** 尺度之旅：各級場景群組與目前的視圖；非 null 時以多次繪製取代一般繪製。 */
   private ladderGroups = new Map<LadderStageId, THREE.Group>()
   private ladderView: LadderView | null = null
+  private ladderSurfaces = new Map<LadderStageId, LatticeSurface>()
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -168,6 +207,9 @@ export class CrystalRenderer {
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1000)
     // 晶體學慣例以 c 軸（z）朝上
     this.camera.up.set(0, 0, 1)
+    this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1000)
+    this.ortho.up.set(0, 0, 1)
+    this.active = this.camera
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.addEventListener('change', () => this.requestRender())
     this.controls.addEventListener('start', () => this.onUserInteract?.())
@@ -261,8 +303,50 @@ export class CrystalRenderer {
     const dist = Math.max(extent, 1) * 2.6
     this.camera.position.set(center[0] + dist * 0.8, center[1] - dist, center[2] + dist * 0.6)
     this.controls.target.set(...center)
+    if (this.active === this.ortho) this.orthoFromPerspective()
     this.controls.update()
     this.requestRender()
+  }
+
+  /**
+   * 切換投影方式。透視 → 正交：以目前相機距離換算等效的視野高度；
+   * 正交 → 透視：反向換算距離，兩者切換時畫面大小不變。
+   */
+  setProjection(mode: 'perspective' | 'orthographic') {
+    const target = this.controls.target
+    if (mode === 'orthographic' && this.active !== this.ortho) {
+      this.orthoFromPerspective()
+      this.active = this.ortho
+    } else if (mode === 'perspective' && this.active !== this.camera) {
+      const halfTan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))
+      const halfH = (this.ortho.top - this.ortho.bottom) / 2 / this.ortho.zoom
+      const dir = this.ortho.position.clone().sub(target).normalize()
+      this.camera.position.copy(target).addScaledVector(dir, halfH / halfTan)
+      this.camera.lookAt(target)
+      this.active = this.camera
+    }
+    if (!this.ladderView) {
+      this.controls.object = this.active
+      this.controls.update()
+    }
+    this.requestRender()
+  }
+
+  /** 讓正交相機與透視相機看到同樣大小的畫面（同方向、同視野高度）。 */
+  private orthoFromPerspective() {
+    const target = this.controls.target
+    const dist = this.camera.position.distanceTo(target)
+    const halfH = dist * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))
+    this.ortho.left = -halfH * this.camera.aspect
+    this.ortho.right = halfH * this.camera.aspect
+    this.ortho.top = halfH
+    this.ortho.bottom = -halfH
+    this.ortho.zoom = 1
+    this.ortho.near = dist * 0.01
+    this.ortho.far = dist * 100
+    this.ortho.position.copy(this.camera.position)
+    this.ortho.lookAt(target)
+    this.ortho.updateProjectionMatrix()
   }
 
   /**
@@ -345,7 +429,8 @@ export class CrystalRenderer {
 
   private draw() {
     if (this.ladderView) this.renderLadder(this.ladderView)
-    else this.renderer.render(this.scene, this.camera)
+    else this.renderer.render(this.scene, this.active)
+    this.onRendered?.()
   }
 
   /**
@@ -357,13 +442,18 @@ export class CrystalRenderer {
       this.disposeGroup(g)
       this.scene.remove(g)
     }
+    for (const sf of this.ladderSurfaces.values()) sf.dispose()
+    this.ladderSurfaces.clear()
     this.ladderGroups.clear()
     this.ladderView = null
     const on = !!stages
     this.content.visible = !on
     this.controls.enableZoom = !on
     this.controls.enablePan = !on
+    // 尺度之旅一律以透視相機繪製（各級依 fov 換算距離）；離開時還原一般檢視的相機
+    this.controls.object = on ? this.camera : this.active
     if (!stages) {
+      this.controls.update()
       this.requestRender()
       return
     }
@@ -371,12 +461,19 @@ export class CrystalRenderer {
       const g = new THREE.Group()
       g.position.set(...stage.offset)
       if (stage.macro) this.buildMacro(g, stage.macro)
+      if (stage.surface) {
+        const sf = new LatticeSurface(stage.surface)
+        this.ladderSurfaces.set(stage.id, sf)
+        g.add(sf.group)
+      }
       if (stage.data) this.buildInto(g, stage.data)
       // 記錄每個材質的基準不透明度，供各級整體淡入淡出
       g.traverse((obj) => {
         for (const m of this.materialsOf(obj)) {
           m.userData.baseOpacity ??= m.opacity
           m.userData.baseDepthWrite ??= m.depthWrite
+          // 文字貼圖等本來就透明的材質，淡入到 1 時仍須保持 transparent，否則貼圖的透明背景會變成黑框
+          m.userData.baseTransparent ??= m.transparent
         }
       })
       g.visible = false
@@ -385,7 +482,7 @@ export class CrystalRenderer {
     }
     // 相機只保留方向；距離由各級的視野高度在繪製時決定
     this.controls.target.copy(ORIGIN)
-    this.camera.position.copy(DEFAULT_VIEW_DIR).multiplyScalar(10)
+    this.camera.position.set(...LADDER_VIEW_DIR).normalize().multiplyScalar(10)
     this.controls.update()
   }
 
@@ -417,6 +514,10 @@ export class CrystalRenderer {
       if (stage.id === 'macro') target.copy(ORIGIN)
       else target.set(...view.latticeTarget)
       const dist = stage.viewHeightUnits / (2 * halfTan)
+      // GPU 表面晶格：依視野決定視窗大小，並提供像素換算（畫面半高 / tan(fov/2)）
+      this.ladderSurfaces
+        .get(stage.id)
+        ?.update(stage.viewHeightUnits, this.container.clientHeight / 2 / halfTan, stage.atomOpacity ?? stage.opacity, stage.opacity)
       this.camera.position.copy(target).addScaledVector(dir, dist)
       this.camera.lookAt(target)
       this.camera.near = dist * 0.02
@@ -446,12 +547,14 @@ export class CrystalRenderer {
       for (const m of this.materialsOf(obj)) {
         const o = (m.userData.baseOpacity ?? 1) * opacity
         if (m instanceof THREE.ShaderMaterial && m.uniforms.uOpacity) {
+          // 表面晶格的材質由 LatticeSurface.update 自行設定
+          if (m.uniforms.uN) continue
           m.uniforms.uOpacity.value = o
           if (m.uniforms.uViewHeight) m.uniforms.uViewHeight.value = viewHeightUnits
           continue
         }
         m.opacity = o
-        m.transparent = o < 0.999 || m.userData.baseOpacity < 0.999
+        m.transparent = o < 0.999 || m.userData.baseOpacity < 0.999 || m.userData.baseTransparent === true
         m.depthWrite = o >= 0.999 && (m.userData.baseDepthWrite ?? true)
       }
     })
@@ -503,11 +606,16 @@ export class CrystalRenderer {
     this.renderer.setSize(w, h, false)
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
+    const halfH = (this.ortho.top - this.ortho.bottom) / 2
+    this.ortho.left = -halfH * (w / h)
+    this.ortho.right = halfH * (w / h)
+    this.ortho.updateProjectionMatrix()
     this.requestRender()
   }
 
   /** 移除並釋放上一次 update 建立的 GPU 資源（共用的球體幾何除外）。 */
   private clearContent() {
+    this.highlighted = null
     this.disposeGroup(this.content)
     this.pieceGroups = []
     this.atomLayerMaterials = []
@@ -518,6 +626,7 @@ export class CrystalRenderer {
 
   private disposeGroup(group: THREE.Group) {
     group.traverse((obj) => {
+      if (obj.userData.ownedBySurface) return
       if (obj instanceof THREE.Sprite) {
         obj.material.map?.dispose()
         obj.material.dispose()
@@ -553,7 +662,65 @@ export class CrystalRenderer {
       mesh.setColorAt(i, color.set(atom.color))
     })
     mesh.userData.baseIds = atoms.map((a) => a.baseId)
+    mesh.userData.atoms = atoms
     return mesh
+  }
+
+  /** 以畫面座標（相對於畫布左上角）挑選最近的原子；尺度之旅期間不挑選。 */
+  pick(x: number, y: number): PickResult | null {
+    if (this.ladderView) return null
+    const { clientWidth: w, clientHeight: h } = this.container
+    if (!w || !h) return null
+    this.raycaster.setFromCamera(new THREE.Vector2((x / w) * 2 - 1, -(y / h) * 2 + 1), this.active)
+    const meshes: THREE.InstancedMesh[] = []
+    this.content.traverse((o) => {
+      if (o instanceof THREE.InstancedMesh && o.userData.atoms && o.visible) meshes.push(o)
+    })
+    const hit = this.raycaster.intersectObjects(meshes, false).find((i) => i.instanceId !== undefined)
+    if (!hit) return null
+    const mesh = hit.object as THREE.InstancedMesh
+    const atom = (mesh.userData.atoms as SceneAtom[])[hit.instanceId!]
+    return this.projectAtom(atom)
+  }
+
+  /** 把原子（content 座標）投影到畫面座標。 */
+  projectAtom(atom: SceneAtom): PickResult {
+    const { clientWidth: w, clientHeight: h } = this.container
+    const centre = this.content.localToWorld(new THREE.Vector3(...atom.position))
+    const projected = centre.clone().project(this.active)
+    // 半徑：取球心沿相機右方位移 r 後的投影距離
+    const right = new THREE.Vector3().setFromMatrixColumn(this.active.matrixWorld, 0).normalize()
+    const edge = centre.clone().addScaledVector(right, atom.radius).project(this.active)
+    const toPx = (v: THREE.Vector3): [number, number] => [((v.x + 1) / 2) * w, ((1 - v.y) / 2) * h]
+    const c = toPx(projected)
+    const e = toPx(edge)
+    return { atom, screen: c, screenRadius: Math.hypot(e[0] - c[0], e[1] - c[1]) }
+  }
+
+  /** 高亮一顆原子（提亮其實例顏色）；傳 null 取消。 */
+  setHighlight(atom: SceneAtom | null) {
+    if (this.highlighted) {
+      this.highlighted.mesh.setColorAt(this.highlighted.index, this.highlighted.color)
+      this.highlighted.mesh.instanceColor!.needsUpdate = true
+      this.highlighted = null
+    }
+    if (atom) {
+      let found: { mesh: THREE.InstancedMesh; index: number } | null = null
+      this.content.traverse((o) => {
+        if (found || !(o instanceof THREE.InstancedMesh) || !o.userData.atoms) return
+        const index = (o.userData.atoms as SceneAtom[]).indexOf(atom)
+        if (index >= 0) found = { mesh: o, index }
+      })
+      if (found) {
+        const { mesh, index } = found as { mesh: THREE.InstancedMesh; index: number }
+        const color = new THREE.Color()
+        mesh.getColorAt(index, color)
+        this.highlighted = { mesh, index, color: color.clone() }
+        mesh.setColorAt(index, color.lerp(new THREE.Color(0xffffff), 0.35))
+        mesh.instanceColor!.needsUpdate = true
+      }
+    }
+    this.requestRender()
   }
 
   /**

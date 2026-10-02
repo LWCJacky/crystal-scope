@@ -8,9 +8,6 @@ import { easeOut } from './easing'
  */
 export type DemoKind = 'assembly' | 'build' | 'ladder'
 
-/** 尺度之旅全程秒數（1× 速度）：約 8 個數量級，每個數量級約 4 秒。 */
-export const LADDER_DURATION = 32
-
 /** 演示在某一時刻的狀態；渲染層只依此設定不透明度與各塊姿態。 */
 export interface DemoState {
   poses: PiecePose[]
@@ -43,7 +40,8 @@ const BUILD = {
 }
 
 export function demoDuration(kind: DemoKind, mode: AssemblyMode): number {
-  if (kind === 'ladder') return LADDER_DURATION
+  // 尺度之旅的長度依剖面（多晶／單晶）而定，由 useDemo 以 ladderSeconds 計算
+  if (kind === 'ladder') return 0
   return kind === 'assembly' ? assemblyDuration(mode) + REVEAL_DURATION : BUILD.bonds.start + BUILD.bonds.fade
 }
 

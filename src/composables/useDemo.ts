@@ -1,5 +1,6 @@
 import { computed } from 'vue'
 import { demoDuration, type DemoKind } from '../core/demo'
+import { buildLadderProfile, ladderSeconds, ROD_METRES_PER_UNIT } from '../core/scaleLadder'
 import { useStructureStore } from '../stores/structure'
 import { useUiStore } from '../stores/ui'
 
@@ -13,11 +14,17 @@ export function useDemo() {
   const kind = computed<DemoKind | null>(() =>
     ui.ladderOn ? 'ladder' : ui.viewMode === 'motif' ? null : prismActive.value ? 'assembly' : 'build',
   )
-  const duration = computed(() => (kind.value ? demoDuration(kind.value, ui.assemblyMode) : 0))
+  /** 尺度之旅的剖面（時間軸依多晶／單晶不同）；巨觀單位只影響繪製，這裡用金屬棒的值即可。 */
+  const ladderProfile = computed(() =>
+    buildLadderProfile(structure.cell.a * 1e-10, ROD_METRES_PER_UNIT, !!structure.source.polycrystalline),
+  )
+  const duration = computed(() =>
+    kind.value === 'ladder' ? ladderSeconds(ladderProfile.value) : kind.value ? demoDuration(kind.value, ui.assemblyMode) : 0,
+  )
   /** 布林值只在跨越終點時改變，因此依賴它的場景重建不會每格觸發。 */
   const running = computed(() => !!kind.value && ui.demoOn && (ui.demoPlaying || ui.demoTime < duration.value))
 
-  return { kind, duration, running, prismActive }
+  return { kind, duration, running, prismActive, ladderProfile }
 }
 
 /** 從頭播放目前範例的演示。 */

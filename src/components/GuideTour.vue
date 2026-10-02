@@ -3,9 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useReducedMotion } from '../composables/useReducedMotion'
 import { TOUR_STEPS } from '../data/tourSteps'
 import { useUiStore } from '../stores/ui'
+import { useI18n } from '../i18n'
 
 const ui = useUiStore()
 const reduced = useReducedMotion()
+const { t, locale } = useI18n()
 
 const step = computed(() => TOUR_STEPS[ui.tourStep])
 const isLast = computed(() => ui.tourStep === TOUR_STEPS.length - 1)
@@ -168,17 +170,17 @@ onBeforeUnmount(() => {
       >
         <div class="top">
           <span class="num-badge">{{ String(ui.tourStep + 1).padStart(2, '0') }}</span>
-          <p class="eyebrow">使用導覽 · 共 {{ TOUR_STEPS.length }} 步</p>
+          <p class="eyebrow">{{ t('tour.eyebrow', { n: TOUR_STEPS.length }) }}</p>
         </div>
-        <h2 :id="`tour-title-${ui.tourStep}`">{{ step.title }}</h2>
-        <p v-for="(line, i) in step.body" :key="i" class="body">{{ line }}</p>
+        <h2 :id="`tour-title-${ui.tourStep}`">{{ step.title[locale] }}</h2>
+        <p v-for="(line, i) in step.body[locale]" :key="i" class="body">{{ line }}</p>
         <div class="dots" aria-hidden="true">
           <span v-for="(_, i) in TOUR_STEPS" :key="i" :class="{ on: i === ui.tourStep }" />
         </div>
         <div class="actions">
-          <button class="skip ghost" @click="ui.closeTour()">略過導覽</button>
-          <button :disabled="ui.tourStep === 0" @click="prev">上一步</button>
-          <button ref="nextButton" class="primary" @click="next">{{ isLast ? '開始探索' : '下一步' }}</button>
+          <button class="skip ghost" @click="ui.closeTour()">{{ t('tour.skip') }}</button>
+          <button :disabled="ui.tourStep === 0" @click="prev">{{ t('tour.prev') }}</button>
+          <button ref="nextButton" class="primary" @click="next">{{ isLast ? t('tour.start') : t('tour.next') }}</button>
         </div>
       </section>
     </Transition>

@@ -70,7 +70,8 @@ export function createGrainMaterial(options: { seedsPerUnit: number; baseColor: 
         // 近處（視野小於約 40 µm → 15 µm）：晶界淡出，相機隨後凍結在晶粒內的均勻色塊
         float nearDetail = smoothstep(0.0015, 0.004, uViewHeight);
         vec3 lined = mix(color * 0.25, color, boundary);
-        color = mix(color, lined, nearDetail);
+        // 近處：晶界與晶粒色調一起淡成基準色，與接手的表面晶格實心面同色
+        color = mix(uBase, lined, nearDetail);
         color = mix(uBase, color, farDetail);
         gl_FragColor = vec4(color, uOpacity);
       }

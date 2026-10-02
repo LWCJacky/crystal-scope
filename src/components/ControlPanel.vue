@@ -9,10 +9,12 @@ import { useUiStore, type ViewMode } from '../stores/ui'
 import { playDemo } from '../composables/useDemo'
 import MotifTable from './MotifTable.vue'
 import PanelCard from './PanelCard.vue'
+import { useI18n } from '../i18n'
 
 const structure = useStructureStore()
 const ui = useUiStore()
 
+const { t, l, term, termParts, locale } = useI18n()
 const unit = computed(() => (structure.source.lengthUnit === 'Å' ? ' Å' : ''))
 
 const cellRows = computed(() => {
@@ -27,10 +29,10 @@ const cellRows = computed(() => {
   ]
 })
 
-const VIEW_MODES: { id: ViewMode; label: string; en: string }[] = [
-  { id: 'latticePoints', label: '晶格點', en: 'Lattice' },
-  { id: 'motif', label: '基元', en: 'Motif' },
-  { id: 'structure', label: '結構', en: 'Structure' },
+const VIEW_MODES: { id: ViewMode; term: 'latticePoints' | 'motif' | 'structure' }[] = [
+  { id: 'latticePoints', term: 'latticePoints' },
+  { id: 'motif', term: 'motif' },
+  { id: 'structure', term: 'structure' },
 ]
 
 /** 目前晶格出現的晶格點類型（圖例只列出實際存在的類型）。 */
@@ -44,7 +46,7 @@ const elements = computed(() => [...new Set(structure.basis.map((a) => a.element
 const atomsPerCell = computed(() => structure.basis.length * latticePointsPerCell(structure.lattice.centering))
 
 const bondRuleText = computed(() =>
-  (structure.source.bonds ?? []).map((r) => `${r.elements.join('–')} ≤ ${r.maxDistance}${unit.value}`).join('、'),
+  (structure.source.bonds ?? []).map((r) => `${r.elements.join('–')} ≤ ${r.maxDistance}${unit.value}`).join(', '),
 )
 
 const hexPrismOn = computed(() => ui.hexPrism && ui.viewMode !== 'motif')
@@ -64,9 +66,7 @@ const num = (id: (typeof MODULE_ORDER)[number]) => visibleModules.value.indexOf(
  * HCP、石墨（P6₃/mmc）繞柱軸純旋轉只有 3 次對稱，60° 需搭配沿 c 平移 c/2（6₃ 螺旋軸）。
  */
 const rotationNote = computed(() =>
-  ui.viewMode === 'latticePoints' || structure.basis.length === 1
-    ? '晶格點繞 c 軸每轉 60° 即與原本重合，轉一圈重複 6 次（6 次旋轉軸）。'
-    : '此結構繞柱軸純轉 60° 不會重合（中間層原子會落到空位），轉 120° 才重合；60° 需再沿 c 平移 c/2，即 6₃ 螺旋軸。切到「晶格點」視圖可看到晶格本身的 6 次對稱。',
+  ui.viewMode === 'latticePoints' || structure.basis.length === 1 ? t('panel.rotNoteLattice') : t('panel.rotNoteStructure'),
 )
 
 /** 拖曳或按住方向鍵連續調整時，只在這一段操作開始時記錄一次復原快照。 */
@@ -93,111 +93,102 @@ const AXES = [
 </script>
 
 <template>
-  <aside class="control-panel" aria-label="控制面板">
+  <aside class="control-panel" :aria-label="t('panel.aria')">
     <section class="hero">
-      <p class="eyebrow">{{ structure.source.group === 'system' ? '晶系示意晶胞' : '晶體結構範例' }}</p>
+      <p class="eyebrow">{{ structure.source.group === 'system' ? t('panel.heroSystem') : t('panel.heroMaterial') }}</p>
       <h2 class="hero-title">
-        {{ structure.source.nameZh }}{{ structure.source.group === 'system' ? '晶系' : '' }}
+        {{ structure.source.group === 'system' ? t('panel.systemTitle', { name: l(structure.source.name) }) : l(structure.source.name) }}
       </h2>
       <div class="hero-chips">
         <span class="chip">{{ structure.source.nameEn }}</span>
         <span class="chip symbol-chip">{{ structure.lattice.symbol }}</span>
       </div>
-      <p v-if="structure.isCustom" class="badge">自訂結構（來源範例：{{ structure.source.nameZh }}）</p>
+      <p v-if="structure.isCustom" class="badge">{{ t('panel.custom', { name: l(structure.source.name) }) }}</p>
       <dl class="meta">
-        <dt>晶胞設定</dt>
-        <dd>{{ structure.source.cellSetting }}</dd>
-        <dt>組成</dt>
-        <dd>{{ structure.source.relations }}</dd>
+        <dt>{{ t('panel.cellSetting') }}</dt>
+        <dd>{{ l(structure.source.cellSetting) }}</dd>
+        <dt>{{ t('panel.relations') }}</dt>
+        <dd>{{ l(structure.source.relations) }}</dd>
       </dl>
-      <p class="desc">{{ structure.source.description }}</p>
-      <p v-if="structure.source.reference" class="note">{{ structure.source.reference }}</p>
+      <p class="desc">{{ l(structure.source.description) }}</p>
+      <p v-if="structure.source.reference" class="note">{{ l(structure.source.reference) }}</p>
     </section>
 
-    <PanelCard data-tour="composition" :index="num('composition')" title="結構 = 晶格點 + 基元" en="Lattice + Motif" icon="motif" accent="violet">
-      <div class="segmented" role="group" aria-label="檢視">
+    <PanelCard data-tour="composition" :index="num('composition')" term="composition" icon="motif" accent="violet">
+      <div class="segmented" role="group" :aria-label="t('panel.viewAria')">
         <button
           v-for="m in VIEW_MODES"
           :key="m.id"
           :aria-pressed="ui.viewMode === m.id"
-          :title="m.en"
           @click="ui.viewMode = m.id"
         >
-          {{ m.label }}
+          {{ termParts(m.term).label }}<span v-if="termParts(m.term).en" class="en-small">{{ termParts(m.term).en }}</span>
         </button>
       </div>
       <label v-if="ui.viewMode === 'structure'" class="check">
-        <input v-model="ui.showAssociation" type="checkbox" /> 疊加晶格點與關聯線（Association）
+        <input v-model="ui.showAssociation" type="checkbox" /> {{ t('panel.association') }}
       </label>
       <MotifTable />
-      <p class="note">每個慣用晶胞：{{ latticePointsPerCell(structure.lattice.centering) }} 個晶格點 × 基元 {{ structure.basis.length }} 個原子 = {{ atomsPerCell }} 個原子</p>
+      <p class="note">{{ t('panel.perCell', { points: latticePointsPerCell(structure.lattice.centering), motif: structure.basis.length, atoms: atomsPerCell }) }}</p>
     </PanelCard>
 
-    <PanelCard data-tour="lattice" :index="num('lattice')" title="布拉菲晶格" en="Bravais lattice" icon="lattice" accent="mint">
-      <div class="lattice-options" role="group" aria-label="布拉菲晶格">
+    <PanelCard data-tour="lattice" :index="num('lattice')" term="bravais" icon="lattice" accent="mint">
+      <div class="lattice-options" role="group" :aria-label="term('bravais')">
         <button
-          v-for="l in structure.source.lattices"
-          :key="l.symbol"
-          :aria-pressed="structure.lattice.symbol === l.symbol"
+          v-for="lat in structure.source.lattices"
+          :key="lat.symbol"
+          :aria-pressed="structure.lattice.symbol === lat.symbol"
           :disabled="structure.source.lattices.length === 1"
-          :title="l.nameEn"
-          @click="structure.setLattice(l.symbol)"
+          :title="lat.nameEn"
+          @click="structure.setLattice(lat.symbol)"
         >
-          {{ l.nameZh }} <span class="symbol">{{ l.symbol }}</span>
+          {{ t(lat.nameKey) }} <span class="symbol">{{ lat.symbol }}</span>
         </button>
       </div>
-      <label class="check"><input v-model="ui.colorByKind" type="checkbox" /> 依晶格點類型著色</label>
+      <label class="check"><input v-model="ui.colorByKind" type="checkbox" /> {{ t('panel.colorByKind') }}</label>
       <ul v-if="ui.colorByKind" class="legend">
         <li v-for="item in legend" :key="item.kind">
           <span class="swatch" :style="{ background: item.color }" />
-          {{ item.nameZh }} <span class="en">{{ item.nameEn }}</span>
-          <span class="pos">{{ item.position }}</span>
+          {{ t(item.nameKey) }} <span v-if="locale !== 'en'" class="en">{{ item.nameEn }}</span>
+          <span class="pos">{{ item.position || t('kind.facePos') }}</span>
         </li>
       </ul>
       <ul v-else-if="elements.length" class="legend">
         <li v-for="el in elements" :key="el">
           <span class="swatch" :style="{ background: elementStyle(el).color }" />
-          {{ el }} <span class="en">{{ elementStyle(el).nameZh }}</span>
+          {{ el }} <span class="en">{{ l(elementStyle(el).name) }}</span>
         </li>
       </ul>
     </PanelCard>
 
-    <PanelCard v-if="showHex" data-tour="hex" :index="num('hex')" title="六方晶系" en="Hexagonal" icon="hex" accent="rose">
-      <label class="check"><input v-model="ui.hexPrism" type="checkbox" /> 六方柱（3 個晶胞組成，高度 = Nc 層）</label>
+    <PanelCard v-if="showHex" data-tour="hex" :index="num('hex')" term="hexagonal" icon="hex" accent="rose">
+      <label class="check"><input v-model="ui.hexPrism" type="checkbox" /> {{ t('panel.hexPrism') }}</label>
       <label class="check" :class="{ disabled: !hexPrismOn }">
-        <input v-model="ui.hexAxes" type="checkbox" :disabled="!hexPrismOn" /> 四軸 a₁、a₂、a₃、c 與 120° 角
+        <input v-model="ui.hexAxes" type="checkbox" :disabled="!hexPrismOn" /> {{ t('panel.hexAxes') }}
       </label>
       <label class="check" :class="{ disabled: !hexPrismOn }">
-        <input v-model="ui.showHabit" type="checkbox" :disabled="!hexPrismOn" /> 晶體外形（六方柱＋雙錐）
+        <input v-model="ui.showHabit" type="checkbox" :disabled="!hexPrismOn" /> {{ t('panel.habit') }}
       </label>
-      <p class="sub-label">拼裝動畫 <span class="en">Assembly</span></p>
-      <div class="segmented assembly-mode" role="group" aria-label="拼裝方式">
-        <button :aria-pressed="ui.assemblyMode === 'wedge6'" :disabled="!hexPrismOn" @click="setAssemblyMode('wedge6')">6 塊三角柱</button>
-        <button :aria-pressed="ui.assemblyMode === 'cell3'" :disabled="!hexPrismOn" @click="setAssemblyMode('cell3')">3 個晶胞</button>
+      <p class="sub-label">{{ term('assembly') }}</p>
+      <div class="segmented assembly-mode" role="group" :aria-label="t('panel.assemblyAria')">
+        <button :aria-pressed="ui.assemblyMode === 'wedge6'" :disabled="!hexPrismOn" @click="setAssemblyMode('wedge6')">{{ t('panel.wedge6') }}</button>
+        <button :aria-pressed="ui.assemblyMode === 'cell3'" :disabled="!hexPrismOn" @click="setAssemblyMode('cell3')">{{ t('panel.cell3') }}</button>
       </div>
       <p v-if="hexPrismOn" class="note">
-        {{
-          ui.assemblyMode === 'wedge6'
-            ? '每塊為六角形的 1/6（幾何切塊，不是晶胞；2 塊合成 1 個晶胞），依序繞 c 軸轉到 60° 間隔的位置。'
-            : '每塊為一個六方晶胞（菱形底面、夾角 120°），3 個晶胞拼成一個六方柱。'
-        }}
-        先合併各塊的形狀，合併完成後再由下往上逐層顯示完整結構的原子。
+        {{ ui.assemblyMode === 'wedge6' ? t('panel.assemblyNoteWedge') : t('panel.assemblyNoteCell') }}
+        {{ t('panel.assemblyNoteTail') }}
       </p>
       <div class="rotate-row">
-        <button :disabled="!hexPrismOn" @click="ui.cRotationSteps++">繞 c 軸旋轉 60°</button>
-        <button :disabled="!hexPrismOn || ui.cRotationSteps === 0" @click="ui.cRotationSteps = 0">歸零</button>
+        <button :disabled="!hexPrismOn" @click="ui.cRotationSteps++">{{ t('panel.rotate60') }}</button>
+        <button :disabled="!hexPrismOn || ui.cRotationSteps === 0" @click="ui.cRotationSteps = 0">{{ t('panel.rotateReset') }}</button>
         <output>{{ ui.cRotationSteps * 60 }}°</output>
       </div>
-      <p class="note">
-        a₁、a₂、a₃ 位於水平面、等長且互夾 120°，a₃ = −(a₁ + a₂)；c 軸垂直於此平面，是六方晶系的唯一軸。四指數晶向 [uvtw] 中 t = −(u + v)。
-      </p>
+      <p class="note">{{ t('panel.hexAxesNote') }}</p>
       <p class="note">{{ rotationNote }}</p>
-      <p v-if="ui.showHabit && hexPrismOn" class="note">
-        外形為理想化幾何示意。常見的黃水晶（石英）外形接近六方柱，但石英實際屬於三方晶系。
-      </p>
+      <p v-if="ui.showHabit && hexPrismOn" class="note">{{ t('panel.habitNote') }}</p>
     </PanelCard>
 
-    <PanelCard v-if="showParams" :index="num('params')" title="基元內部參數" en="Motif parameters" icon="param" accent="sky">
+    <PanelCard v-if="showParams" :index="num('params')" term="motifParams" icon="param" accent="sky">
       <div v-for="p in structure.source.parameters" :key="p.key" class="param-row">
         <label :for="`param-${p.key}`"><i>{{ p.key }}</i></label>
         <input
@@ -210,17 +201,16 @@ const AXES = [
           @input="onParamInput(p.key, +($event.target as HTMLInputElement).value)"
         />
         <output>{{ structure.params[p.key].toFixed(4) }}</output>
-        <p class="note full">{{ p.note }}</p>
+        <p class="note full">{{ l(p.note) }}</p>
       </div>
     </PanelCard>
 
-    <PanelCard data-tour="spheres" :index="num('spheres')" title="球體與鍵" en="Spheres &amp; bonds" icon="sphere" accent="amber">
+    <PanelCard data-tour="spheres" :index="num('spheres')" term="spheresBonds" icon="sphere" accent="amber">
       <label v-if="structure.source.hardSphere" class="check">
-        <input v-model="ui.hardSphere" type="checkbox" /> 硬球接觸模型（r = 最近鄰距離 / 2 =
-        {{ (structure.nearestNeighbor / 2).toFixed(3) }}{{ unit }}）
+        <input v-model="ui.hardSphere" type="checkbox" /> {{ t('panel.hardSphere', { r: `${(structure.nearestNeighbor / 2).toFixed(3)}${unit}` }) }}
       </label>
       <div class="param-row">
-        <label for="sphere-scale">大小</label>
+        <label for="sphere-scale">{{ t('panel.size') }}</label>
         <input
           id="sphere-scale"
           v-model.number="ui.sphereScale"
@@ -233,25 +223,25 @@ const AXES = [
         <output>{{ ui.sphereScale.toFixed(2) }}×</output>
       </div>
       <label v-if="structure.source.bonds?.length" class="check">
-        <input v-model="ui.showBonds" type="checkbox" /> 鍵／最近鄰連線（{{ bondRuleText }}）
+        <input v-model="ui.showBonds" type="checkbox" /> {{ t('panel.bonds', { rules: bondRuleText }) }}
       </label>
       <label class="check" :class="{ disabled: ui.viewMode !== 'structure' }">
-        <input v-model="ui.clipToCell" type="checkbox" :disabled="ui.viewMode !== 'structure'" /> 裁切至晶胞（看角落 ⅛、面上 ½）
+        <input v-model="ui.clipToCell" type="checkbox" :disabled="ui.viewMode !== 'structure'" /> {{ t('panel.clip') }}
       </label>
-      <p class="note">球體大小為示意比例；硬球模型僅為幾何模型，不代表真實原子半徑。</p>
+      <p class="note">{{ t('panel.sphereNote') }}</p>
     </PanelCard>
 
-    <PanelCard :index="num('cell')" title="晶胞參數" en="Cell parameters" icon="cell" accent="sky">
+    <PanelCard :index="num('cell')" term="cellParams" icon="cell" accent="sky">
       <table class="params">
         <tr v-for="[k, v] in cellRows" :key="k">
           <th>{{ k }}</th>
           <td>{{ v }}</td>
         </tr>
       </table>
-      <p class="todo">編輯與教學鎖定：M2</p>
+      <p class="todo">{{ t('panel.cellTodo') }}</p>
     </PanelCard>
 
-    <PanelCard :index="num('repeat')" title="週期排列" en="Repeat" icon="repeat" accent="mint">
+    <PanelCard :index="num('repeat')" term="repeat" icon="repeat" accent="mint">
       <div v-for="[key, label] in AXES" :key="key" class="repeat-row">
         <label :for="key">{{ label }}</label>
         <input
@@ -275,21 +265,29 @@ const AXES = [
       </div>
     </PanelCard>
 
-    <PanelCard :index="num('atom')" title="原子位置" en="Fractional x, y, z" icon="atom" accent="violet">
-      <p class="todo">選取與編輯分率座標：M1</p>
+    <PanelCard :index="num('atom')" term="atomPosition" icon="atom" accent="violet">
+      <p class="todo">{{ t('panel.atomTodo') }}</p>
     </PanelCard>
 
-    <PanelCard :index="num('direction')" title="晶向" en="Direction [uvw]" icon="direction" accent="rose">
-      <p class="todo">晶向箭頭與沿晶向觀看：M3</p>
+    <PanelCard :index="num('direction')" term="direction" icon="direction" accent="rose">
+      <p class="todo">{{ t('panel.directionTodo') }}</p>
     </PanelCard>
 
-    <PanelCard :index="num('display')" title="顯示" en="Display" icon="display" accent="sky">
-      <label class="check"><input v-model="ui.showCellEdges" type="checkbox" /> 晶胞邊線</label>
-      <label class="check"><input v-model="ui.showAxes" type="checkbox" /> 晶格向量 a、b、c</label>
+    <PanelCard :index="num('display')" term="display" icon="display" accent="sky">
+      <label class="check"><input v-model="ui.showCellEdges" type="checkbox" /> {{ t('panel.cellEdges') }}</label>
+      <label class="check"><input v-model="ui.showAxes" type="checkbox" /> {{ t('panel.axes') }}</label>
       <label class="check" :class="{ disabled: !ui.showAxes }">
-        <input v-model="ui.showAngles" type="checkbox" :disabled="!ui.showAxes" /> 晶軸夾角 α、β、γ
+        <input v-model="ui.showAngles" type="checkbox" :disabled="!ui.showAxes" /> {{ t('panel.angles') }}
       </label>
-      <label class="check"><input v-model="structure.repeat.showBoundaryImages" type="checkbox" /> 邊界複本（淡色）</label>
+      <label class="check"><input v-model="structure.repeat.showBoundaryImages" type="checkbox" /> {{ t('panel.boundary') }}</label>
+      <div class="row-inline">
+        <span>{{ t('panel.projection') }}</span>
+        <div class="segmented" role="group" :aria-label="t('panel.projectionAria')">
+          <button :aria-pressed="ui.projection === 'perspective'" :title="t('panel.perspectiveTitle')" @click="ui.projection = 'perspective'">{{ term('perspective') }}</button>
+          <button :aria-pressed="ui.projection === 'orthographic'" :title="t('panel.orthographicTitle')" @click="ui.projection = 'orthographic'">{{ term('orthographic') }}</button>
+        </div>
+      </div>
+      <p v-if="ui.projection === 'perspective'" class="note">{{ t('panel.perspectiveNote') }}</p>
     </PanelCard>
   </aside>
 </template>
@@ -353,6 +351,14 @@ const AXES = [
 }
 .segmented {
   margin-bottom: 8px;
+}
+/* 分段按鈕內的英文原文：另起一行、縮小，避免按鈕過寬換行 */
+.en-small {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.1;
+  opacity: 0.7;
 }
 .lattice-options {
   display: flex;
@@ -457,6 +463,14 @@ const AXES = [
 }
 .check.disabled {
   opacity: 0.45;
+}
+.row-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 2px;
+  font-size: 0.88rem;
+  color: var(--text-2);
 }
 .todo {
   margin: 0;

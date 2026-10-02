@@ -3,12 +3,15 @@ import { ref } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useUiStore } from '../stores/ui'
 import ModuleIcon from './icons/ModuleIcon.vue'
+import { useI18n } from '../i18n'
+import { LOCALES } from '../i18n/types'
 
 const settings = useSettingsStore()
 const ui = useUiStore()
 const dialog = ref<HTMLDialogElement>()
 
 const s = settings.values
+const { t, term, termParts } = useI18n()
 
 function open() {
   dialog.value?.showModal()
@@ -38,70 +41,85 @@ defineExpose({ open })
         <div class="head-title">
           <span class="icon-tile"><ModuleIcon name="param" /></span>
           <div>
-            <p class="eyebrow">共用設定</p>
-            <h2 id="settings-title">設定 <span class="en">Settings</span></h2>
+            <p class="eyebrow">{{ t('settings.eyebrow') }}</p>
+            <h2 id="settings-title">{{ termParts('settings').label }} <span v-if="termParts('settings').en" class="en">{{ termParts('settings').en }}</span></h2>
           </div>
         </div>
-        <button class="close ghost" aria-label="關閉" @click.prevent="close">✕</button>
+        <button class="close ghost" :aria-label="t('settings.close')" @click.prevent="close">✕</button>
       </header>
 
       <fieldset>
-        <legend>演示與動畫</legend>
-        <label class="check"><input v-model="s.autoplay" type="checkbox" /> 點選範例時自動播放演示</label>
-        <label class="check"><input v-model="s.autoRotate" type="checkbox" /> 演示完成後自動旋轉</label>
+        <legend>{{ t('settings.demoGroup') }}</legend>
+        <label class="check"><input v-model="s.autoplay" type="checkbox" /> {{ t('settings.autoplay') }}</label>
+        <label class="check"><input v-model="s.autoRotate" type="checkbox" /> {{ t('settings.autoRotate') }}</label>
         <div class="row">
-          <label for="set-rot">自轉一圈</label>
+          <label for="set-rot">{{ t('settings.rotSeconds') }}</label>
           <input id="set-rot" v-model.number="s.autoRotateSeconds" type="range" min="10" max="120" step="5" :disabled="!s.autoRotate" />
-          <output>{{ s.autoRotateSeconds }} 秒</output>
+          <output>{{ t('settings.seconds', { n: s.autoRotateSeconds }) }}</output>
         </div>
         <div class="row">
-          <span>演示速度</span>
-          <div class="segmented" role="group" aria-label="演示速度">
+          <span>{{ t('settings.demoSpeed') }}</span>
+          <div class="segmented" role="group" :aria-label="t('settings.demoSpeed')">
             <button v-for="v in [0.5, 1, 2] as const" :key="v" type="button" :aria-pressed="s.demoSpeed === v" @click="s.demoSpeed = v">
               {{ v }}×
             </button>
           </div>
         </div>
         <div class="row">
-          <span>六方柱拼裝</span>
-          <div class="segmented" role="group" aria-label="六方柱拼裝方式">
-            <button type="button" :aria-pressed="s.assemblyMode === 'wedge6'" @click="s.assemblyMode = 'wedge6'">6 塊三角柱</button>
-            <button type="button" :aria-pressed="s.assemblyMode === 'cell3'" @click="s.assemblyMode = 'cell3'">3 個晶胞</button>
+          <span>{{ t('settings.assembly') }}</span>
+          <div class="segmented" role="group" :aria-label="t('settings.assembly')">
+            <button type="button" :aria-pressed="s.assemblyMode === 'wedge6'" @click="s.assemblyMode = 'wedge6'">{{ t('panel.wedge6') }}</button>
+            <button type="button" :aria-pressed="s.assemblyMode === 'cell3'" @click="s.assemblyMode = 'cell3'">{{ t('panel.cell3') }}</button>
           </div>
         </div>
       </fieldset>
 
       <fieldset>
-        <legend>顯示</legend>
-        <label class="check"><input v-model="s.showCellEdges" type="checkbox" /> 晶胞邊線</label>
-        <label class="check"><input v-model="s.showAxes" type="checkbox" /> 晶格向量 a、b、c</label>
-        <label class="check"><input v-model="s.showAngles" type="checkbox" /> 晶軸夾角 α、β、γ</label>
-        <label class="check"><input v-model="s.showBoundaryImages" type="checkbox" /> 邊界複本（淡色）</label>
-        <label class="check"><input v-model="s.showBonds" type="checkbox" /> 鍵／最近鄰連線</label>
+        <legend>{{ t('settings.displayGroup') }}</legend>
+        <label class="check"><input v-model="s.showCellEdges" type="checkbox" /> {{ t('panel.cellEdges') }}</label>
+        <label class="check"><input v-model="s.showAxes" type="checkbox" /> {{ t('panel.axes') }}</label>
+        <label class="check"><input v-model="s.showAngles" type="checkbox" /> {{ t('panel.angles') }}</label>
         <div class="row">
-          <label for="set-size">球體大小</label>
+          <span>{{ t('panel.projection') }}</span>
+          <div class="segmented" role="group" :aria-label="t('panel.projectionAria')">
+            <button type="button" :aria-pressed="s.projection === 'perspective'" @click="s.projection = 'perspective'">{{ term('perspective') }}</button>
+            <button type="button" :aria-pressed="s.projection === 'orthographic'" @click="s.projection = 'orthographic'">{{ term('orthographic') }}</button>
+          </div>
+        </div>
+        <label class="check"><input v-model="s.showBoundaryImages" type="checkbox" /> {{ t('panel.boundary') }}</label>
+        <label class="check"><input v-model="s.showBonds" type="checkbox" /> {{ t('settings.bonds') }}</label>
+        <div class="row">
+          <label for="set-size">{{ t('panel.size') }}</label>
           <input id="set-size" v-model.number="s.sphereScale" type="range" min="0.3" max="1.6" step="0.05" />
           <output>{{ s.sphereScale.toFixed(2) }}×</output>
         </div>
       </fieldset>
 
       <fieldset>
-        <legend>介面</legend>
+        <legend>{{ t('settings.uiGroup') }}</legend>
         <div class="row">
-          <span>預設模式</span>
-          <div class="segmented" role="group" aria-label="介面模式">
-            <button type="button" :aria-pressed="s.appMode === 'explore'" @click="s.appMode = 'explore'">探索</button>
-            <button type="button" :aria-pressed="s.appMode === 'presentation'" @click="s.appMode = 'presentation'">投影</button>
+          <span>{{ t('settings.language') }}</span>
+          <div class="segmented" role="group" :aria-label="t('settings.language')">
+            <button v-for="l in LOCALES" :key="l.id" type="button" :lang="l.htmlLang" :aria-pressed="s.locale === l.id" @click="s.locale = l.id">
+              {{ l.label }}
+            </button>
           </div>
         </div>
-        <button type="button" class="link" @click="replayTour">重新觀看使用導覽 →</button>
+        <div class="row">
+          <span>{{ t('settings.defaultMode') }}</span>
+          <div class="segmented" role="group" :aria-label="t('settings.defaultMode')">
+            <button type="button" :aria-pressed="s.appMode === 'explore'" @click="s.appMode = 'explore'">{{ t('header.explore') }}</button>
+            <button type="button" :aria-pressed="s.appMode === 'presentation'" @click="s.appMode = 'presentation'">{{ t('header.presentation') }}</button>
+          </div>
+        </div>
+        <button type="button" class="link" @click="replayTour">{{ t('settings.replayTour') }}</button>
       </fieldset>
 
-      <p class="note">設定以 cookie 保存在此瀏覽器（一年有效，只記錄與預設不同的項目，不含個人資料）。瀏覽器會在載入本站時一併送出此 cookie，但本站為靜態網站，伺服器不會讀取或使用它。</p>
+      <p class="note">{{ t('settings.cookieNote') }}</p>
 
       <footer>
-        <button type="button" @click="settings.reset()">恢復預設</button>
-        <button type="button" class="primary" @click="close">完成</button>
+        <button type="button" @click="settings.reset()">{{ t('settings.reset') }}</button>
+        <button type="button" class="primary" @click="close">{{ t('settings.done') }}</button>
       </footer>
     </form>
   </dialog>

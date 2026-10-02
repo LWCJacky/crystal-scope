@@ -3,30 +3,32 @@ import { selectExample } from '../composables/selectExample'
 import { CRYSTAL_SYSTEMS } from '../data/crystalSystems'
 import { MATERIALS } from '../data/materials'
 import { useStructureStore } from '../stores/structure'
+import { useI18n } from '../i18n'
 
 const structure = useStructureStore()
+const { t, l, termParts } = useI18n()
 
 const GROUPS = [
-  { title: '七大晶系', en: 'Crystal systems', items: CRYSTAL_SYSTEMS, accent: 'violet' },
-  { title: '晶體結構範例', en: 'Structures', items: MATERIALS, accent: 'mint' },
+  { term: 'crystalSystems' as const, items: CRYSTAL_SYSTEMS, accent: 'violet' },
+  { term: 'structures' as const, items: MATERIALS, accent: 'mint' },
 ]
 </script>
 
 <template>
-  <aside class="system-list" aria-label="結構範例">
-    <section v-for="(g, gi) in GROUPS" :key="g.title" class="group">
+  <aside class="system-list" :aria-label="t('list.aria')">
+    <section v-for="(g, gi) in GROUPS" :key="g.term" class="group">
       <header class="group-head">
         <span class="num-badge">{{ String(gi + 1).padStart(2, '0') }}</span>
         <div>
-          <h2>{{ g.title }}</h2>
-          <p class="en">{{ g.en }}</p>
+          <h2>{{ termParts(g.term).label }}</h2>
+          <p v-if="termParts(g.term).en" class="en">{{ termParts(g.term).en }}</p>
         </div>
       </header>
       <ul :style="{ '--accent': `var(--${g.accent})` }">
         <li v-for="s in g.items" :key="s.id">
           <button class="item" :aria-current="structure.exampleId === s.id" @click="selectExample(s.id)">
-            <span class="zh">{{ s.nameZh }}</span>
-            <span class="tag">{{ s.group === 'system' ? s.nameEn : s.lattices[0].symbol }}</span>
+            <span class="zh">{{ l(s.name) }}</span>
+            <span v-if="s.group !== 'system' || s.nameEn !== l(s.name)" class="tag">{{ s.group === 'system' ? s.nameEn : s.lattices[0].symbol }}</span>
           </button>
         </li>
       </ul>

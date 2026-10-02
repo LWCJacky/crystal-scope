@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { generateCellEdges, generateImages, generateLatticePoints, wrapFraction, wrapPosition } from '../periodic'
+import { clampRepeat, generateCellEdges, generateImages, generateLatticePoints, wrapFraction, wrapPosition } from '../periodic'
 import type { Centering } from '../centering'
 import type { BasisAtom, RepeatSettings } from '../types'
 import { CRYSTAL_SYSTEMS } from '../../data/crystalSystems'
@@ -75,9 +75,11 @@ describe('generateImages', () => {
     expect(images[0].fractionalPosition).toEqual([0, 0.5, 0.5])
   })
 
-  it('clamps repeat counts to 1…5', () => {
-    expect(generateImages([atoms[1]], repeat(9))).toHaveLength(125)
+  it('honours any repeat count (the 1…5 limit belongs to the UI slider only)', () => {
+    expect(generateImages([atoms[1]], repeat(11))).toHaveLength(1331)
     expect(generateImages([atoms[1]], repeat(0))).toHaveLength(1)
+    expect(clampRepeat(9)).toBe(5)
+    expect(clampRepeat(0)).toBe(1)
   })
 })
 
