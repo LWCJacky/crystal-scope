@@ -752,7 +752,10 @@ export class CrystalRenderer {
     const centre = this.content.localToWorld(new THREE.Vector3(...atom.position))
     const dir = this.active.position.clone().sub(this.controls.target).normalize()
     const screenUp = new THREE.Vector3().setFromMatrixColumn(this.active.matrixWorld, 1).normalize()
-    const halfH = atom.radius / FOCUS_FRACTION
+    const halfTan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))
+    // 目前的視野半高；硬球模式的原子很大，光靠「球佔 16%」可能幾乎不推進，所以至少推進到原本的 60%
+    const currentHalfH = this.active === this.ortho ? this.ortho.top / this.ortho.zoom : this.active.position.distanceTo(this.controls.target) * halfTan
+    const halfH = Math.min(atom.radius / FOCUS_FRACTION, currentHalfH * 0.6)
     // 球心要在畫面上方 viewY·halfH 處 → 目標點放在球心下方
     const target = centre.clone().addScaledVector(screenUp, -viewY * halfH)
     let zoom = this.ortho.zoom
@@ -761,7 +764,7 @@ export class CrystalRenderer {
       position = target.clone().addScaledVector(dir, this.ortho.position.distanceTo(this.controls.target))
       zoom = this.ortho.top / halfH
     } else {
-      position = target.clone().addScaledVector(dir, halfH / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)))
+      position = target.clone().addScaledVector(dir, halfH / halfTan)
     }
     this.tweenCamera(position, target, zoom, reduced ? 0 : 650)
   }
