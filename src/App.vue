@@ -253,13 +253,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   background: var(--border-strong);
 }
 .sheet-body {
+  /* flex 直欄的子項預設 min-height: auto，不設 0 會被內容撐高、超出面板而無法捲動 */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* 面板本身負責捲動，瀏覽器只需處理直向平移 */
+  touch-action: pan-y;
 }
 .sheet-body .panel {
   padding-top: 4px;
+  padding-bottom: 32px;
   background: transparent;
+  /* 內層不再各自捲動，交給 sheet-body */
+  overflow: visible;
 }
 .sheet-bar {
   border-top: none;
