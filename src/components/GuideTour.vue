@@ -46,11 +46,13 @@ const vh = ref(window.innerHeight)
 const card = ref<HTMLElement>()
 const nextButton = ref<HTMLButtonElement>()
 const cardSize = ref({ w: 340, h: 220 })
+/** 手機：卡片貼在標題列下方或分頁列上方，兩者的邊界在 measure() 量測。 */
+const headerBottom = ref(0)
+const tabTop = ref(window.innerHeight)
 
 const PAD = 6
 const GAP = 14
 const MARGIN = 16
-const NARROW = 640
 
 function measure() {
   // 導覽關閉時不做任何版面讀取（捲動、縮放事件仍會進來）
@@ -68,6 +70,20 @@ function measure() {
     rect.value = { x, y, w: Math.min(r.right, vw.value) - x, h: Math.min(r.bottom, vh.value) - y }
   }
   if (card.value) cardSize.value = { w: card.value.offsetWidth, h: card.value.offsetHeight }
+  headerBottom.value = document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 0
+  tabTop.value = document.querySelector('.tabbar')?.getBoundingClientRect().top ?? vh.value
+}
+
+/**
+ * 手機：卡片放在示範對象的另一側。對象在下半部（底部面板裡）→ 卡片貼標題列下方；
+ * 對象在上半部、佔滿畫面（3D 檢視區）或沒有對象 → 卡片貼分頁列上方。
+ * 每一步只在面板捲定後決定一次，之後面板捲動只更新高亮區，卡片不翻面。
+ */
+const phoneSide = ref<'top' | 'bottom'>('bottom')
+function pickSide() {
+  const r = rect.value
+  if (!r || r.h > vh.value * 0.5) return 'bottom'
+  return r.y + r.h / 2 > vh.value / 2 ? 'top' : 'bottom'
 }
 
 /**
@@ -84,7 +100,7 @@ const clipPath = computed(() => {
 
 /** 卡片位置：依序嘗試高亮區的右、左、下、上，最後夾在視窗內；窄螢幕改為底部卡片。 */
 const cardStyle = computed(() => {
-  if (vw.value < NARROW) return {}
+  if (isMobile.value) return phoneSide.value === 'top' ? { top: `${headerBottom.value + 8}px` } : { bottom: `${vh.value - tabTop.value + 8}px` }
   const { w, h } = cardSize.value
   const r = rect.value
   if (!r) return { left: `${(vw.value - w) / 2}px`, top: `${(vh.value - h) / 2}px` }
@@ -109,9 +125,11 @@ async function show(index: number, runEnter = true) {
   await nextTick()
   if (isMobile.value) await new Promise((r) => setTimeout(r, 300))
   const target = step.value.target ? document.querySelector<HTMLElement>(step.value.target) : null
-  target?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduced.value ? 'auto' : 'smooth' })
+  // 手機：即時捲動，讓接下來的量測就是最終位置
+  target?.scrollIntoView({ block: isMobile.value ? 'start' : 'nearest', inline: 'nearest', behavior: reduced.value || isMobile.value ? 'auto' : 'smooth' })
   requestAnimationFrame(() => {
     measure()
+    phoneSide.value = pickSide()
     ;(nextButton.value ?? card.value?.querySelector<HTMLElement>('.lang[aria-pressed="true"], .lang'))?.focus({ preventScroll: true })
   })
 }
@@ -191,17 +209,20 @@ onBeforeUnmount(() => {
         :key="ui.tourStep"
         ref="card"
         class="card"
-        :class="{ sheet: vw < NARROW }"
+        :class="{ phone: isMobile }"
         :style="cardStyle"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`tour-title-${ui.tourStep}`"
       >
-        <div class="top">
+        <div v-if="!isMobile" class="top">
           <span class="num-badge">{{ String(ui.tourStep + 1).padStart(2, '0') }}</span>
           <p class="eyebrow">{{ t('tour.eyebrow', { n: TOUR_STEPS.length }) }}</p>
         </div>
-        <h2 :id="`tour-title-${ui.tourStep}`">{{ step.title[locale] }}</h2>
+        <h2 :id="`tour-title-${ui.tourStep}`">
+          <span v-if="isMobile" class="num-badge">{{ String(ui.tourStep + 1).padStart(2, '0') }}</span>
+          {{ step.title[locale] }}
+        </h2>
         <template v-if="step.kind === 'language'">
           <div class="languages">
             <button
@@ -262,11 +283,40 @@ onBeforeUnmount(() => {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   pointer-events: auto;
 }
-.card.sheet {
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
+ /* 手機：精簡「教練條」，貼在標題列下方或分頁列上方（由 cardStyle 決定），不蓋住示範對象 */
+.card.phone {
+  left: 12px;
+  right: 12px;
   width: auto;
+  max-height: 44dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+}
+.phone h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.98rem;
+}
+.phone .body {
+  margin-bottom: 4px;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+.phone .dots {
+  margin: 6px 0 8px;
+}
+.phone .languages {
+  margin: 6px 0 8px;
+}
+.phone .lang {
+  padding: 10px 6px;
+}
+.phone .actions button {
+  min-height: 40px;
 }
 .top {
   display: flex;

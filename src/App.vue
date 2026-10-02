@@ -81,7 +81,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <!-- 手機：底部分頁列（安全區內）＋ 從底部滑出的面板 -->
     <template v-else>
       <div class="scrim" :class="{ on: ui.sheet }" aria-hidden="true" @click="ui.sheet = null" />
-      <section class="sheet" :class="{ open: ui.sheet }" :aria-hidden="!ui.sheet" :aria-label="ui.sheet ? t(`nav.${ui.sheet}`) : undefined">
+      <section class="sheet" :class="{ open: ui.sheet, compact: ui.tourOpen }" :aria-hidden="!ui.sheet" :aria-label="ui.sheet ? t(`nav.${ui.sheet}`) : undefined">
         <button class="handle ghost" :aria-label="t('nav.close')" @click="ui.sheet = null"><span /></button>
         <div class="sheet-body">
           <SystemList v-show="ui.sheet === 'examples'" class="panel" />
@@ -241,6 +241,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 }
 .sheet.open {
   transform: translateY(0);
+}
+/* 導覽進行中：面板只開一半，中間留一截 3D 畫面，導覽卡片放在上方 */
+.sheet.compact {
+  max-height: 46dvh;
 }
 .handle {
   display: grid;
