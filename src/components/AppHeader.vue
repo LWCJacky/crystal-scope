@@ -70,6 +70,8 @@ function reset() {
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 18px;
+  /* 瀏海／動態島：內容往下讓開，背景仍延伸到最頂 */
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
@@ -110,5 +112,39 @@ function reset() {
   height: 20px;
   margin: 0 4px;
   background: var(--border);
+}
+/* 手機：單列，動作列可橫向滑動（瀏覽器保留直向捲動） */
+@media (max-width: 860px) {
+  .app-header {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 8px 12px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+  .brand {
+    gap: 8px;
+    flex: none;
+  }
+  .sub {
+    display: none;
+  }
+  .actions {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    padding-bottom: 2px;
+    /* 右緣淡出：提示還有更多按鈕可以滑 */
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  .actions::-webkit-scrollbar {
+    display: none;
+  }
+  .actions > * {
+    flex: none;
+  }
 }
 </style>

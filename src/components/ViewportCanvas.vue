@@ -817,6 +817,8 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 18px;
   bottom: 18px;
+  /* 手機：避開左下角被拇指遮住的區域、字級略小 */
+  font-size: 0.92em;
   max-width: min(360px, calc(100% - 36px));
   padding: 10px 14px 12px;
   border: 1px solid var(--border-strong);
@@ -826,6 +828,13 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   backdrop-filter: blur(6px);
   pointer-events: none;
+}
+@media (max-width: 860px) {
+  .scalebar {
+    left: 10px;
+    bottom: 10px;
+    padding: 8px 10px 10px;
+  }
 }
 .bar-row {
   display: flex;

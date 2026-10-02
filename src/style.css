@@ -80,9 +80,25 @@
   box-sizing: border-box;
 }
 
+/* 手機基線：不畫系統的點按高亮、橫向不放大字、不觸發整頁的下拉更新／橡皮筋 */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
+}
+
+/* 觸控裝置：輸入框至少 16px，iOS 才不會聚焦時放大頁面 */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 h1,
@@ -93,6 +109,16 @@ h3 {
 }
 
 /* ── 按鈕：膠囊外框；選中為淡色調填色＋有色文字 ── */
+button,
+a,
+[role='button'] {
+  /* 立即觸發 click（不等雙擊縮放判定）；控制項文字長按不選取、不跳出選單 */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 button {
   font: inherit;
   font-size: 0.88rem;

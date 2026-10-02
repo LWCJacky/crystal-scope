@@ -6,11 +6,22 @@ import { useUiStore } from '../stores/ui'
 import { useI18n } from '../i18n'
 import { LOCALES, type Locale } from '../i18n/types'
 import { useSettingsStore } from '../stores/settings'
+import { MOBILE_QUERY, useMediaQuery } from '../composables/useMediaQuery'
 
 const ui = useUiStore()
 const reduced = useReducedMotion()
 const settings = useSettingsStore()
 const { t, locale } = useI18n()
+const isMobile = useMediaQuery(MOBILE_QUERY)
+
+/** 手機版：導覽目標位於哪個底部面板（不在面板裡的目標則收合面板）。 */
+function sheetFor(target?: string): 'examples' | 'demo' | 'controls' | null {
+  if (!target) return null
+  if (target.includes('system-list')) return 'examples'
+  if (target.includes('animation-bar') || target.includes('ladder')) return 'demo'
+  if (target.includes('data-tour="composition"') || target.includes('data-tour="lattice"') || target.includes('data-tour="spheres"') || target.includes('data-tour="hex"')) return 'controls'
+  return null
+}
 
 /** 語言步驟的按鈕文字：各語言以自己的文字顯示，並附該語言的英文名。 */
 const LANGUAGE_OPTIONS: { id: Locale; native: string; en: string }[] = [
@@ -92,8 +103,10 @@ const cardStyle = computed(() => {
 async function show(index: number, runEnter = true) {
   ui.tourStep = index
   if (runEnter) TOUR_STEPS[index].enter?.()
-  // 等待範例切換造成的版面變動完成後再定位
+  if (isMobile.value) ui.sheet = sheetFor(TOUR_STEPS[index].target)
+  // 等待範例切換造成的版面變動完成後再定位（面板滑入需要一點時間）
   await nextTick()
+  if (isMobile.value) await new Promise((r) => setTimeout(r, 300))
   const target = step.value.target ? document.querySelector<HTMLElement>(step.value.target) : null
   target?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduced.value ? 'auto' : 'smooth' })
   requestAnimationFrame(() => {

@@ -56,6 +56,8 @@ export const useUiStore = defineStore('ui', () => {
   const autoRotatePref = toRef(settings, 'autoRotate')
   const autoRotateSeconds = toRef(settings, 'autoRotateSeconds')
   const autoRotating = ref(false)
+  /** 手機版面：目前打開的底部面板（null = 收合）。 */
+  const sheet = ref<'examples' | 'demo' | 'controls' | null>(null)
   /** 執行中的例外狀態：WebGL 上下文遺失、未捕捉的錯誤訊息（供提示條顯示）。 */
   const contextLost = ref(false)
   const runtimeError = ref<string | null>(null)
@@ -72,6 +74,7 @@ export const useUiStore = defineStore('ui', () => {
   function closeTour() {
     tourOpen.value = false
     tourSeen.value = true
+    sheet.value = null
   }
 
   /** 由「重置」或切換晶系遞增，通知檢視區回到預設視角。 */
@@ -108,6 +111,7 @@ export const useUiStore = defineStore('ui', () => {
     autoRotatePref,
     autoRotateSeconds,
     autoRotating,
+    sheet,
     contextLost,
     runtimeError,
     tourOpen,

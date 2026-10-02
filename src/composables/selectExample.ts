@@ -16,6 +16,8 @@ export function selectExample(id: string) {
   // 六方晶系預設以六方柱呈現四軸與六次對稱
   ui.hexPrism = example.systemId === 'hexagonal'
   ui.cRotationSteps = 0
+  // 手機版：選完範例收合面板，讓使用者直接看到演示
+  ui.sheet = null
   if (ui.autoplay) playDemo()
   else {
     ui.demoOn = false

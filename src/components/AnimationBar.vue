@@ -123,6 +123,24 @@ function scrub(e: Event) {
   margin-left: auto;
   color: var(--muted);
 }
+@media (max-width: 860px) {
+  .title {
+    min-width: 0;
+    width: 100%;
+  }
+  .progress {
+    flex-basis: 100%;
+    max-width: none;
+    /* 拖曳進度條時由滑桿處理橫向，直向交給面板捲動 */
+    touch-action: pan-y;
+  }
+  .prefs {
+    margin-left: 0;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+}
 .prefs label {
   display: flex;
   align-items: center;
