@@ -136,6 +136,7 @@ export default {
   'card.bondCount': '最近接の連結線 {n} 本',
   'card.bondUndefined': '未定義',
   'card.kindPoint': '{kind}格子点',
+  'card.close': '閉じる',
   'info.latticePointNote': '{kind}格子点：{lattice}格子 {symbol} の並進対称点で、原子そのものではありません。各格子点には同じモチーフ（原子 {n} 個）が対応します。',
   'info.boundaryNote': 'これは単位格子の境界上の周期像で、反対側の面の同じ位置にある原子と同一です。',
   'info.atomNote': 'モチーフの第 {n} 原子。{kind}格子点から並進したもので、構造 = 格子点 + モチーフ。',

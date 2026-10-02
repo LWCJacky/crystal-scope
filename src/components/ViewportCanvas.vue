@@ -562,24 +562,80 @@ function onPointerMove(e: PointerEvent) {
   })
 }
 
-/** 觸控：點一下顯示該原子的資訊，點空白處關閉。 */
+// ── 觸控：輕點一顆原子 → 鏡頭推近、資訊卡停靠在底部；點空白處返回 ──
+
+const focused = ref<PickResult | null>(null)
+const focusColor = computed(() => focused.value?.atom.color ?? '')
+let tapStart: { x: number; y: number; t: number } | null = null
+/** 聚焦前是否正在自轉；返回時恢復。 */
+let rotatingBeforeFocus = false
+
+/** 以 capture 階段監聽：要在 OrbitControls 的 start（會把自轉關掉）之前記下是否正在自轉。 */
 function onPointerDown(e: PointerEvent) {
-  if (e.pointerType !== 'touch') return
-  const rect = host.value!.getBoundingClientRect()
-  const hit = renderer?.pick(e.clientX - rect.left, e.clientY - rect.top) ?? null
-  if (hit) hoverSide.value = hit.screen[0] > rect.width - 300 ? 'left' : 'right'
-  setHovered(hit)
+  if (e.pointerType !== 'touch' || !e.isPrimary) return
+  tapStart = { x: e.clientX, y: e.clientY, t: performance.now() }
+  if (!renderer?.focused) rotatingBeforeFocus = ui.autoRotating
 }
 
+/** 放開時才判斷是「輕點」還是拖曳／縮放（移動 < 10 px 且 < 500 ms）。 */
+function onPointerUp(e: PointerEvent) {
+  if (e.pointerType !== 'touch' || !e.isPrimary || !tapStart) return
+  const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y)
+  const elapsed = performance.now() - tapStart.t
+  tapStart = null
+  if (moved > 10 || elapsed > 500) return
+  const rect = host.value!.getBoundingClientRect()
+  const hit = renderer?.pick(e.clientX - rect.left, e.clientY - rect.top) ?? null
+  if (hit) focusAtom(hit)
+  else if (renderer?.focused) unfocusAtom()
+}
+
+function focusAtom(hit: PickResult) {
+  if (!renderer) return
+  ui.autoRotating = false
+  hovered.value = null
+  currentAtom = hit.atom
+  renderer.setHighlight(hit.atom)
+  focused.value = hit
+  renderer.focusAtom(hit.atom, 0.3, reducedMotion.value)
+}
+
+function unfocusAtom() {
+  if (!renderer) return
+  focused.value = null
+  currentAtom = null
+  renderer.setHighlight(null)
+  renderer.unfocus(reducedMotion.value)
+  if (rotatingBeforeFocus && ui.autoRotatePref && !demo.running.value) ui.autoRotating = true
+  rotatingBeforeFocus = false
+}
+
+/** 滑鼠離開畫布：收起懸停卡（觸控放開後也會發 pointerleave，不能因此清掉停靠卡）。 */
+function onPointerLeave(e: PointerEvent) {
+  if (e.pointerType === 'touch') return
+  clearHover()
+}
+
+/** 收起懸停卡（滑鼠離開、使用者開始拖曳相機）；聚焦中的停靠卡不受影響。 */
 function clearHover() {
   lastPointer = null
-  if (!currentAtom) return
+  if (!currentAtom || renderer?.focused) return
   setHovered(null)
 }
 
-/** 每次繪製後讓資訊卡跟著球體（自轉、旋轉時）。 */
+/** 場景重建：相機已重設、原子物件已換新，直接忘掉懸停與聚焦。 */
+function clearPicked() {
+  if (renderer?.focused) {
+    renderer.clearFocus()
+    focused.value = null
+    rotatingBeforeFocus = false
+  }
+  clearHover()
+}
+
+/** 每次繪製後讓懸停卡跟著球體（自轉、旋轉時）；停靠卡不跟隨。 */
 function followHovered() {
-  if (!currentAtom || !renderer) return
+  if (!currentAtom || !renderer || renderer.focused) return
   hovered.value = renderer.projectAtom(currentAtom)
 }
 
@@ -647,12 +703,15 @@ onMounted(() => {
     return
   }
   document.fonts?.ready.then(() => (fontsReady.value = true))
+  // 開發模式：讓瀏覽器主控台／自動化測試能檢視渲染器狀態
+  if (import.meta.env.DEV) (window as unknown as { __cs: unknown }).__cs = { get renderer() { return renderer }, ui }
   const sizeObserver = new ResizeObserver(() => (hostHeight.value = host.value?.clientHeight ?? 600))
   sizeObserver.observe(host.value!)
   host.value!.addEventListener('wheel', onWheel, { passive: false })
   host.value!.addEventListener('pointermove', onPointerMove)
-  host.value!.addEventListener('pointerdown', onPointerDown)
-  host.value!.addEventListener('pointerleave', clearHover)
+  host.value!.addEventListener('pointerdown', onPointerDown, true)
+  host.value!.addEventListener('pointerup', onPointerUp)
+  host.value!.addEventListener('pointerleave', onPointerLeave)
 
   // 於 renderer 建立後才開始追蹤；任何結構或顯示設定變動都會重建場景
   watchEffect(() => {
@@ -665,7 +724,7 @@ onMounted(() => {
       queueMicrotask(applyLadder)
       return
     }
-    clearHover()
+    clearPicked()
     renderer?.update(buildScene())
     // 重建場景後套用目前的演示狀態；放進 microtask，讓時間不被此 effect 追蹤，避免每格重建場景
     if (demo.running.value) queueMicrotask(applyDemoState)
@@ -730,8 +789,9 @@ onMounted(() => {
     cancelAnimationFrame(hoverFrame)
     host.value?.removeEventListener('wheel', onWheel)
     host.value?.removeEventListener('pointermove', onPointerMove)
-    host.value?.removeEventListener('pointerdown', onPointerDown)
-    host.value?.removeEventListener('pointerleave', clearHover)
+    host.value?.removeEventListener('pointerdown', onPointerDown, true)
+    host.value?.removeEventListener('pointerup', onPointerUp)
+    host.value?.removeEventListener('pointerleave', onPointerLeave)
   })
 })
 
@@ -757,6 +817,7 @@ onBeforeUnmount(() => {
       :side="hoverSide"
       :color="hoverColor"
     />
+    <AtomCard :info="focused?.atom.info ?? null" docked :x="0" :y="0" :radius="0" side="right" :color="focusColor" @close="unfocusAtom" />
     <!-- 尺度之旅的比例尺：長度隨放大連續變化，是整段動畫的教學核心 -->
     <Transition name="fade">
       <div v-if="scaleBarInfo" class="scalebar" aria-live="polite">

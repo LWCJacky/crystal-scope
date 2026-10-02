@@ -136,6 +136,7 @@ export default {
   'card.bondCount': '{n} 條最近鄰連線',
   'card.bondUndefined': '未定義',
   'card.kindPoint': '{kind}晶格點',
+  'card.close': '關閉',
   'info.latticePointNote': '{kind}晶格點：{lattice}晶格 {symbol} 的平移對稱點，本身不是原子；每個晶格點關聯同一組基元（{n} 個原子）。',
   'info.boundaryNote': '這是晶胞邊界上的週期複本，與對面同位置的原子為同一顆。',
   'info.atomNote': '基元第 {n} 顆原子，經{kind}晶格點平移而來；結構 = 晶格點 + 基元。',

@@ -136,6 +136,7 @@ export default {
   'card.bondCount': '{n} nearest-neighbour links',
   'card.bondUndefined': 'not defined',
   'card.kindPoint': '{kind} lattice point',
+  'card.close': 'Close',
   'info.latticePointNote': '{kind} lattice point: a translational symmetry point of the {lattice} lattice {symbol}; not an atom itself. Every lattice point carries the same motif ({n} atoms).',
   'info.boundaryNote': 'This is a periodic image on the cell boundary — the same atom as the one at the equivalent position on the opposite face.',
   'info.atomNote': 'Motif atom {n}, translated from a {kind} lattice point; structure = lattice point + motif.',

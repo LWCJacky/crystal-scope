@@ -55,9 +55,9 @@ export const TOUR_STEPS: TourStep[] = [
     target: '.area-center',
     title: t('操作 3D 模型', 'Working the 3D model', '3D モデルの操作'),
     body: b(
-      ['左鍵拖曳：旋轉｜滾輪：縮放｜右鍵拖曳：平移。', '觸控裝置：單指旋轉、雙指縮放與平移。頂部「重置」可回到預設視角。'],
-      ['Left-drag: rotate | wheel: zoom | right-drag: pan.', 'Touch: one finger rotates, two fingers zoom and pan. "Reset" in the header restores the default view.'],
-      ['左ドラッグ：回転｜ホイール：ズーム｜右ドラッグ：平行移動。', 'タッチ操作：1 本指で回転、2 本指でズームと移動。上部の「リセット」で既定の視点に戻ります。'],
+      ['左鍵拖曳：旋轉｜滾輪：縮放｜右鍵拖曳：平移。', '觸控裝置：單指旋轉、雙指縮放與平移；輕點任一顆原子，鏡頭會推近並顯示它的資訊，點空白處返回。頂部「重置」可回到預設視角。'],
+      ['Left-drag: rotate | wheel: zoom | right-drag: pan.', 'Touch: one finger rotates, two fingers zoom and pan; tap any atom to zoom in on it and read its details, tap empty space to go back. "Reset" restores the default view.'],
+      ['左ドラッグ：回転｜ホイール：ズーム｜右ドラッグ：平行移動。', 'タッチ操作：1 本指で回転、2 本指でズームと移動。原子をタップするとズームして情報を表示し、空白をタップすると戻ります。「リセット」で既定の視点に戻ります。'],
     ),
   },
   {

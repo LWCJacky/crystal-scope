@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { easeInOut } from '../core/easing'
 import type { Polyhedron } from '../core/habit'
 import type { ClipPlane } from '../core/lattice'
 import type { LatticePointKind } from '../core/centering'
@@ -9,6 +10,9 @@ import { createGrainMaterial } from './grainMaterial'
 import { LatticeSurface, type LatticeSurfaceSpec } from './latticeSurface'
 
 /** 懸停資訊卡的內容：由檢視區組裝，渲染層只負責挑選與投影。 */
+/** 聚焦時球半徑佔視野半高的比例（球直徑約為畫面高度的 22%）。 */
+const FOCUS_FRACTION = 0.16
+
 export interface AtomInfo {
   kind: 'atom' | 'latticePoint'
   element: string
@@ -191,6 +195,9 @@ export class CrystalRenderer {
   private firstFrameDone = false
   private readonly raycaster = new THREE.Raycaster()
   private highlighted: { mesh: THREE.InstancedMesh; index: number; color: THREE.Color } | null = null
+  /** 聚焦原子前的相機姿態；非 null 表示目前處於聚焦狀態。 */
+  private savedPose: { position: THREE.Vector3; target: THREE.Vector3; zoom: number } | null = null
+  private focusFrame = 0
   private pieceGroups: { group: THREE.Group; edge: THREE.Material; face: THREE.Material; centroidAngle: number }[] = []
   private atomLayerMaterials: THREE.Material[] = []
   private latticeLayerMaterials: THREE.Material[] = []
@@ -227,7 +234,12 @@ export class CrystalRenderer {
     this.active = this.camera
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.addEventListener('change', () => this.requestRender())
-    this.controls.addEventListener('start', () => this.onUserInteract?.())
+    this.controls.addEventListener('start', () => {
+      // 使用者接手相機：中止聚焦補間
+      cancelAnimationFrame(this.focusFrame)
+      this.focusFrame = 0
+      this.onUserInteract?.()
+    })
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8890a0, 2.2))
     const key = new THREE.DirectionalLight(0xffffff, 1.6)
@@ -714,6 +726,94 @@ export class CrystalRenderer {
     const c = toPx(projected)
     const e = toPx(edge)
     return { atom, screen: c, screenRadius: Math.hypot(e[0] - c[0], e[1] - c[1]) }
+  }
+
+  /** 目前是否聚焦在某顆原子上。 */
+  get focused() {
+    return this.savedPose !== null
+  }
+
+  /**
+   * 鏡頭推進到一顆原子：視線方向不變（不失去方位感），目標點移到球心附近、
+   * 距離縮到球佔視野高度約 FOCUS_FRACTION，並把球心放在畫面偏上 viewY（以視野半高為單位），
+   * 留出下方給停靠的資訊卡。正交相機改 zoom 而不是距離。
+   */
+  focusAtom(atom: SceneAtom, viewY = 0.35, reduced = false) {
+    if (this.ladderView) return
+    if (!this.savedPose) {
+      this.savedPose = { position: this.active.position.clone(), target: this.controls.target.clone(), zoom: this.ortho.zoom }
+      // 近距離下文字標籤（軸名、夾角）會變得巨大並擋住原子，聚焦期間隱藏
+      this.setLabelsVisible(false)
+    }
+    const centre = this.content.localToWorld(new THREE.Vector3(...atom.position))
+    const dir = this.active.position.clone().sub(this.controls.target).normalize()
+    const screenUp = new THREE.Vector3().setFromMatrixColumn(this.active.matrixWorld, 1).normalize()
+    const halfH = atom.radius / FOCUS_FRACTION
+    // 球心要在畫面上方 viewY·halfH 處 → 目標點放在球心下方
+    const target = centre.clone().addScaledVector(screenUp, -viewY * halfH)
+    let zoom = this.ortho.zoom
+    let position: THREE.Vector3
+    if (this.active === this.ortho) {
+      position = target.clone().addScaledVector(dir, this.ortho.position.distanceTo(this.controls.target))
+      zoom = this.ortho.top / halfH
+    } else {
+      position = target.clone().addScaledVector(dir, halfH / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)))
+    }
+    this.tweenCamera(position, target, zoom, reduced ? 0 : 650)
+  }
+
+  /** 回到聚焦前的視角。 */
+  unfocus(reduced = false) {
+    const pose = this.savedPose
+    if (!pose) return
+    this.savedPose = null
+    this.setLabelsVisible(true)
+    this.tweenCamera(pose.position, pose.target, pose.zoom, reduced ? 0 : 500)
+  }
+
+  /** 場景重建時直接忘掉聚焦（相機已由 update() 重設）。 */
+  clearFocus() {
+    this.savedPose = null
+    cancelAnimationFrame(this.focusFrame)
+    this.focusFrame = 0
+  }
+
+  private setLabelsVisible(visible: boolean) {
+    this.content.traverse((o) => {
+      if (o instanceof THREE.Sprite) o.visible = visible
+    })
+    this.requestRender()
+  }
+
+  /** 相機位置、目標（與正交 zoom）的補間：畫面上的移動用 ease-in-out。 */
+  private tweenCamera(position: THREE.Vector3, target: THREE.Vector3, zoom: number, ms: number) {
+    cancelAnimationFrame(this.focusFrame)
+    this.focusFrame = 0
+    const cam = this.active
+    const p0 = cam.position.clone()
+    const t0 = this.controls.target.clone()
+    const z0 = this.ortho.zoom
+    const apply = (k: number) => {
+      cam.position.lerpVectors(p0, position, k)
+      this.controls.target.lerpVectors(t0, target, k)
+      if (cam === this.ortho) {
+        this.ortho.zoom = z0 + (zoom - z0) * k
+        this.ortho.updateProjectionMatrix()
+      }
+      this.controls.update()
+      this.requestRender()
+    }
+    if (ms <= 0) {
+      apply(1)
+      return
+    }
+    const start = performance.now()
+    const loop = (now: number) => {
+      const k = Math.min(1, (now - start) / ms)
+      apply(easeInOut(k))
+      this.focusFrame = k < 1 ? requestAnimationFrame(loop) : 0
+    }
+    this.focusFrame = requestAnimationFrame(loop)
   }
 
   /** 高亮一顆原子（提亮其實例顏色）；傳 null 取消。 */
