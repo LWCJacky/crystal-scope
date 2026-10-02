@@ -53,7 +53,8 @@ describe('localised data', () => {
     for (const e of Object.values(ELEMENTS)) for (const id of LOCALE_IDS) expect(e.name[id]).toBeTruthy()
     for (const step of TOUR_STEPS) for (const id of LOCALE_IDS) {
       expect(step.title[id]).toBeTruthy()
-      expect(step.body[id].length).toBeGreaterThan(0)
+      // 語言選擇步驟以按鈕取代說明文字
+      if (step.kind !== 'language') expect(step.body[id].length).toBeGreaterThan(0)
     }
   })
 })

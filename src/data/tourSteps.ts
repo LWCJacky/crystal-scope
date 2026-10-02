@@ -7,6 +7,8 @@ import { useUiStore } from '../stores/ui'
 export interface TourStep {
   /** 要高亮的元素選擇器；省略時為置中的歡迎卡。 */
   target?: string
+  /** language：語言選擇步驟（三種語言各以自己的文字顯示，點選即切換並前進）。 */
+  kind?: 'language'
   title: L10n
   body: Record<Locale, string[]>
   /** 進入此步驟時執行，讓使用者直接看到示範（沉浸式引導）。 */
@@ -17,6 +19,12 @@ const t = (zh: string, en: string, ja: string): L10n => ({ 'zh-TW': zh, en, ja }
 const b = (zh: string[], en: string[], ja: string[]): Record<Locale, string[]> => ({ 'zh-TW': zh, en, ja })
 
 export const TOUR_STEPS: TourStep[] = [
+  {
+    kind: 'language',
+    // 語言尚未選定，標題與說明在三種語言下皆同時呈現三語
+    title: t('選擇語言 · Choose language · 言語を選択', 'Choose language · 選擇語言 · 言語を選択', '言語を選択 · Choose language · 選擇語言'),
+    body: b([], [], []),
+  },
   {
     title: t('歡迎來到 CrystalScope', 'Welcome to CrystalScope', 'CrystalScope へようこそ'),
     body: b(

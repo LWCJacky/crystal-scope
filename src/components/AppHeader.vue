@@ -4,6 +4,7 @@ import { useStructureStore } from '../stores/structure'
 import { useUiStore } from '../stores/ui'
 import ModuleIcon from './icons/ModuleIcon.vue'
 import SettingsDialog from './SettingsDialog.vue'
+import AboutDialog from './AboutDialog.vue'
 import { useI18n } from '../i18n'
 import { LOCALES } from '../i18n/types'
 import { useSettingsStore } from '../stores/settings'
@@ -13,6 +14,7 @@ const ui = useUiStore()
 const settings = useSettingsStore()
 const { t } = useI18n()
 const settingsDialog = ref<InstanceType<typeof SettingsDialog>>()
+const aboutDialog = ref<InstanceType<typeof AboutDialog>>()
 
 function reset() {
   structure.resetExample()
@@ -52,9 +54,11 @@ function reset() {
       </div>
       <span class="divider" aria-hidden="true" />
       <button data-tour="settings" :title="t('header.settingsTitle')" @click="settingsDialog?.open()">{{ t('header.settings') }}</button>
+      <button data-tour="about" :title="t('header.aboutTitle')" @click="aboutDialog?.open()">{{ t('header.about') }}</button>
       <button data-tour="help" class="primary" :title="t('header.helpTitle')" @click="ui.openTour()">{{ t('header.help') }}</button>
     </nav>
     <SettingsDialog ref="settingsDialog" />
+    <AboutDialog ref="aboutDialog" />
   </header>
 </template>
 

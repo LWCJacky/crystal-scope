@@ -4,10 +4,25 @@ import { useReducedMotion } from '../composables/useReducedMotion'
 import { TOUR_STEPS } from '../data/tourSteps'
 import { useUiStore } from '../stores/ui'
 import { useI18n } from '../i18n'
+import { LOCALES, type Locale } from '../i18n/types'
+import { useSettingsStore } from '../stores/settings'
 
 const ui = useUiStore()
 const reduced = useReducedMotion()
+const settings = useSettingsStore()
 const { t, locale } = useI18n()
+
+/** 語言步驟的按鈕文字：各語言以自己的文字顯示，並附該語言的英文名。 */
+const LANGUAGE_OPTIONS: { id: Locale; native: string; en: string }[] = [
+  { id: 'zh-TW', native: '繁體中文', en: 'Traditional Chinese' },
+  { id: 'en', native: 'English', en: '' },
+  { id: 'ja', native: '日本語', en: 'Japanese' },
+]
+
+function chooseLanguage(id: Locale) {
+  settings.values.locale = id
+  next()
+}
 
 const step = computed(() => TOUR_STEPS[ui.tourStep])
 const isLast = computed(() => ui.tourStep === TOUR_STEPS.length - 1)
@@ -83,7 +98,7 @@ async function show(index: number, runEnter = true) {
   target?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduced.value ? 'auto' : 'smooth' })
   requestAnimationFrame(() => {
     measure()
-    nextButton.value?.focus({ preventScroll: true })
+    ;(nextButton.value ?? card.value?.querySelector<HTMLElement>('.lang[aria-pressed="true"], .lang'))?.focus({ preventScroll: true })
   })
 }
 
@@ -173,6 +188,22 @@ onBeforeUnmount(() => {
           <p class="eyebrow">{{ t('tour.eyebrow', { n: TOUR_STEPS.length }) }}</p>
         </div>
         <h2 :id="`tour-title-${ui.tourStep}`">{{ step.title[locale] }}</h2>
+        <template v-if="step.kind === 'language'">
+          <div class="languages">
+            <button
+              v-for="opt in LANGUAGE_OPTIONS"
+              :key="opt.id"
+              :lang="LOCALES.find((x) => x.id === opt.id)?.htmlLang"
+              class="lang"
+              :aria-pressed="locale === opt.id"
+              @click="chooseLanguage(opt.id)"
+            >
+              <span class="native">{{ opt.native }}</span>
+              <span v-if="opt.en" class="en">{{ opt.en }}</span>
+            </button>
+          </div>
+          <p class="body">{{ t('tour.languageNote') }}</p>
+        </template>
         <p v-for="(line, i) in step.body[locale]" :key="i" class="body">{{ line }}</p>
         <div class="dots" aria-hidden="true">
           <span v-for="(_, i) in TOUR_STEPS" :key="i" :class="{ on: i === ui.tourStep }" />
@@ -180,7 +211,7 @@ onBeforeUnmount(() => {
         <div class="actions">
           <button class="skip ghost" @click="ui.closeTour()">{{ t('tour.skip') }}</button>
           <button :disabled="ui.tourStep === 0" @click="prev">{{ t('tour.prev') }}</button>
-          <button ref="nextButton" class="primary" @click="next">{{ isLast ? t('tour.start') : t('tour.next') }}</button>
+          <button v-if="step.kind !== 'language'" ref="nextButton" class="primary" @click="next">{{ isLast ? t('tour.start') : t('tour.next') }}</button>
         </div>
       </section>
     </Transition>
@@ -257,6 +288,33 @@ h2 {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+}
+/* 語言選擇：三個大按鈕，各以自己的文字顯示 */
+.languages {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.lang {
+  display: grid;
+  gap: 2px;
+  padding: 12px 8px;
+  border-radius: 12px;
+  text-align: center;
+}
+.lang .native {
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+.lang .en {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.lang[aria-pressed='true'] .en {
+  color: inherit;
+  opacity: 0.8;
 }
 .skip {
   margin-right: auto;
