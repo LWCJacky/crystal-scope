@@ -467,10 +467,20 @@ const AXES = [
 .row-inline {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 8px 0 2px;
   font-size: 0.88rem;
   color: var(--text-2);
+}
+/* 標籤不折成直排；按鈕群放不下時整組換行 */
+.row-inline > span {
+  flex: none;
+  white-space: nowrap;
+}
+.row-inline .segmented {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .todo {
   margin: 0;
