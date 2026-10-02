@@ -45,9 +45,10 @@ GitHub Pages：<https://lwcjacky.com/crystal-scope/>（`lwcjacky.github.io/cryst
 | [Three.js](https://threejs.org/) | 3D 渲染 | MIT |
 | [Vue](https://vuejs.org/)、[Pinia](https://pinia.vuejs.org/) | 介面與狀態管理 | MIT |
 
-## AI 協作
+## 作者與共同作者
 
-開發過程中使用了 GPT-6（OpenAI）、Claude Opus 5.5 與 Claude Fable 5.1（Anthropic）協助規劃、程式撰寫與審查；科學內容與最終決定由作者負責。
+- 作者：LWCJacky（著作權所有人）
+- 共同作者（AI 協作模型）：GPT-6（OpenAI）、Claude Opus 5.5、Claude Fable 5.1（Anthropic）——協助規劃、程式撰寫與審查；科學內容與最終決定由作者負責。
 
 ## 授權
 

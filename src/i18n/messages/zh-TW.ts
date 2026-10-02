@@ -114,6 +114,8 @@ export default {
   'about.licenseNote': '本專案（程式碼與教學內容）以 {license} 授權：可自由使用、修改與散布，衍生作品須以相同授權開源並保留版權聲明。',
   'about.author': '作者',
   'about.copyright': '© {year} {author}',
+  'about.coauthors': '共同作者',
+  'about.coauthorsNote': 'AI 協作模型；著作權屬作者',
   'about.github': 'GitHub 專案',
   'about.githubNote': '原始碼、問題回報與貢獻',
   'about.deps': '使用的開源套件',

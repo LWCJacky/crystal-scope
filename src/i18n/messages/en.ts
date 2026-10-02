@@ -114,6 +114,8 @@ export default {
   'about.licenseNote': 'This project (code and teaching content) is licensed under {license}: free to use, modify and redistribute; derivative works must stay open under the same license and keep the copyright notice.',
   'about.author': 'Author',
   'about.copyright': '© {year} {author}',
+  'about.coauthors': 'Co-authors',
+  'about.coauthorsNote': 'AI collaborators; copyright remains with the author',
   'about.github': 'GitHub project',
   'about.githubNote': 'Source code, issues and contributions',
   'about.deps': 'Open-source packages',

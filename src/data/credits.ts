@@ -7,6 +7,8 @@ export const PROJECT = {
   licenseUrl: 'https://www.gnu.org/licenses/gpl-3.0.html',
   github: 'https://github.com/LWCJacky/crystal-scope',
   version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev',
+  /** 共同作者：開發過程中協作的 AI 模型（著作權仍屬人類作者）。 */
+  coauthors: ['GPT-6', 'Claude Opus 5.5', 'Claude Fable 5.1'],
 } as const
 
 export interface Dependency {

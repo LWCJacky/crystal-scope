@@ -114,6 +114,8 @@ export default {
   'about.licenseNote': '本プロジェクト（コードと教材内容）は {license} の下で提供されます。自由に使用・改変・再配布できますが、派生物は同じライセンスで公開し、著作権表示を保持する必要があります。',
   'about.author': '作者',
   'about.copyright': '© {year} {author}',
+  'about.coauthors': '共同作者',
+  'about.coauthorsNote': 'AI 協働モデル。著作権は作者に帰属',
   'about.github': 'GitHub プロジェクト',
   'about.githubNote': 'ソースコード・問題報告・貢献',
   'about.deps': '使用しているオープンソースパッケージ',

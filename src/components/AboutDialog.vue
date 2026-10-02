@@ -47,6 +47,8 @@ defineExpose({ open })
       <dl class="facts">
         <dt>{{ t('about.author') }}</dt>
         <dd>{{ t('about.copyright', { year: PROJECT.year, author: PROJECT.author }) }}</dd>
+        <dt>{{ t('about.coauthors') }}</dt>
+        <dd>{{ PROJECT.coauthors.join(' · ') }}<span class="muted"> · {{ t('about.coauthorsNote') }}</span></dd>
         <dt>{{ t('about.license') }}</dt>
         <dd>{{ t('about.licenseNote', { license: PROJECT.license }) }}</dd>
         <dt>{{ t('about.github') }}</dt>
