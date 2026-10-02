@@ -90,7 +90,6 @@ function blockCorner(viewMode: ViewMode, repeat?: Vec3): Vec3 {
 
 function buildScene(over?: SceneOverrides): SceneData {
   const basis = structure.latticeBasis
-  const example = structure.source
   const { a, b, c } = structure.cell
   const minLen = Math.min(a, b, c)
   const viewMode = over?.viewMode ?? ui.viewMode
@@ -102,7 +101,7 @@ function buildScene(over?: SceneOverrides): SceneData {
   const showAssociation = over ? false : ui.showAssociation
 
   // 球體半徑：硬球接觸模型（最近鄰距離 / 2）或示意大小
-  const contact = ui.hardSphere && example.hardSphere ? structure.nearestNeighbor / 2 : null
+  const contact = ui.hardSphere && structure.hardSphereAllowed ? structure.nearestNeighbor / 2 : null
   const radiusOf = (element: string) =>
     contact ?? (element === 'X' ? 0.12 * minLen : elementStyle(element).displayRadius) * ui.sphereScale
   const latticePointRadius = 0.06 * minLen
@@ -129,7 +128,7 @@ function buildScene(over?: SceneOverrides): SceneData {
       n: structure.basis.length,
     }),
   })
-  const bondRules = example.bonds ?? []
+  const bondRules = structure.bondRules
   const atomInfo = (img: AtomImage, atom: BasisAtom): AtomInfo => {
     const index = structure.basis.findIndex((b) => b.id === atom.id) + 1
     const style = elementStyle(atom.element)
@@ -174,8 +173,8 @@ function buildScene(over?: SceneOverrides): SceneData {
   let latticePoints: AtomImage[]
   if (over) {
     const repeat: RepeatSettings = { repeatA: corner[0], repeatB: corner[1], repeatC: corner[2], showBoundaryImages: over.boundaryImages }
-    images = generateImages(structure.basis, repeat, structure.lattice.centering)
-    latticePoints = generateLatticePoints(repeat, structure.lattice.centering)
+    images = generateImages(structure.basis, repeat, structure.centering)
+    latticePoints = generateLatticePoints(repeat, structure.centering)
   } else {
     images = prism ? structure.prismImages : clipping ? structure.imagesWithMargin : structure.images
     latticePoints = prism ? structure.prismLatticePoints : structure.latticePoints
@@ -389,12 +388,12 @@ function hexToRgb(hex: string): [number, number, number] {
 function buildSurfaceSpec(polycrystalline: boolean): LatticeSurfaceSpec {
   const basis = structure.latticeBasis
   const minLen = Math.min(structure.cell.a, structure.cell.b, structure.cell.c)
-  const contact = ui.hardSphere && structure.source.hardSphere ? structure.nearestNeighbor / 2 : null
+  const contact = ui.hardSphere && structure.hardSphereAllowed ? structure.nearestNeighbor / 2 : null
   const atoms: LatticeSurfaceSpec['atoms'] = []
   for (const atom of structure.basis) {
     const style = elementStyle(atom.element)
     const radius = contact ?? (atom.element === 'X' ? 0.12 * minLen : style.displayRadius) * ui.sphereScale
-    for (const { vector: t } of centeringTranslations(structure.lattice.centering)) {
+    for (const { vector: t } of centeringTranslations(structure.centering)) {
       const f = atom.fractionalPosition
       atoms.push({ frac: wrapPosition([f[0] + t[0], f[1] + t[1], f[2] + t[2]]), radius, color: hexToRgb(style.color) })
     }
@@ -608,6 +607,8 @@ function focusAtom(hit: PickResult) {
   currentAtom = hit.atom
   renderer.setHighlight(hit.atom)
   focused.value = hit
+  // 設計模式：點選即選取該基底原子（週期複本編輯其基底，所有等價複本同步）
+  if (structure.editable && hit.atom.info?.kind === 'atom') structure.selectedAtomId = hit.atom.baseId
   renderer.focusAtom(hit.atom, 0.3, reducedMotion.value)
 }
 
