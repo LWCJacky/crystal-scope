@@ -23,6 +23,7 @@ export const TERMS = {
   atomPosition: { en: 'Fractional x, y, z', 'zh-TW': '原子位置', ja: '原子位置' },
   direction: { en: 'Direction [uvw]', 'zh-TW': '晶向', ja: '結晶方位' },
   display: { en: 'Display', 'zh-TW': '顯示', ja: '表示' },
+  stats: { en: 'Statistics', 'zh-TW': '統計', ja: '統計' },
   settings: { en: 'Settings', 'zh-TW': '設定', ja: '設定' },
   demo: { en: 'Demo', 'zh-TW': '演示', ja: 'デモ' },
   scaleJourney: { en: 'Scale journey', 'zh-TW': '尺度之旅', ja: 'スケールの旅' },

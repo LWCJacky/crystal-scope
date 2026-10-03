@@ -1,5 +1,5 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
-import { ref, toRef } from 'vue'
+import { reactive, ref, toRef } from 'vue'
 import { useSettingsStore } from './settings'
 
 export type AppMode = 'explore' | 'presentation'
@@ -16,6 +16,28 @@ export const useUiStore = defineStore('ui', () => {
   const mode = toRef(settings, 'appMode')
   const showAxes = toRef(settings, 'showAxes')
   const showCellEdges = toRef(settings, 'showCellEdges')
+  /** 三層格線：主晶胞（可見性沿用共用設定）、重複晶胞格線、超晶胞外框；顏色與不透明度為本次瀏覽的設定。 */
+  const edgeCell = reactive({
+    get visible() {
+      return settings.showCellEdges
+    },
+    set visible(v: boolean) {
+      settings.showCellEdges = v
+    },
+    color: '#b3bbcb',
+    opacity: 0.9,
+  })
+  const edgeGrid = reactive({ visible: true, color: '#7a8394', opacity: 0.55 })
+  const edgeFrame = reactive({ visible: true, color: '#98a1b3', opacity: 0.8 })
+  /** 原子與連線的不透明度（外觀，只動材質）。 */
+  const atomOpacity = ref(1)
+  const bondOpacity = ref(1)
+  /** PNG 匯出請求（檢視區監看）。 */
+  const pngRequest = ref<{ id: number; legend: boolean } | null>(null)
+  const pngLegend = ref(true)
+  function requestPng(legend: boolean) {
+    pngRequest.value = { id: Date.now(), legend }
+  }
   const viewMode = ref<ViewMode>('structure')
   /** 依晶格點類型（角落／底心／體心／面心）著色；關閉時依元素著色。 */
   const colorByKind = ref(true)
@@ -88,6 +110,14 @@ export const useUiStore = defineStore('ui', () => {
     mode,
     showAxes,
     showCellEdges,
+    edgeCell,
+    edgeGrid,
+    edgeFrame,
+    atomOpacity,
+    bondOpacity,
+    pngRequest,
+    pngLegend,
+    requestPng,
     viewMode,
     colorByKind,
     showAssociation,

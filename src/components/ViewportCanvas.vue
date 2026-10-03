@@ -8,7 +8,9 @@ import { cubeHabit, parallelepipedHabit, polyhedronExtent, type Polyhedron } fro
 import { angleArc, hexagonalAxes, hexagonalHabit, hexPrismEdges } from '../core/hexagonal'
 import { cellClipPlanes, fracToCart } from '../core/lattice'
 import { findBonds } from '../core/neighbors'
-import { LATTICE_POINT_ID, generateCellEdges, generateImages, generateLatticePoints, imageCellPosition } from '../core/periodic'
+import { LATTICE_POINT_ID, generateImages, generateLatticePoints, imageCellPosition } from '../core/periodic'
+import { gridLayers, unitCellEdges } from '../core/grid'
+import { downloadDataUrl, safeFilename } from '../services/fileIo'
 import { centeringTranslations } from '../core/centering'
 import { wrapPosition } from '../core/periodic'
 import { BLOCK_CELLS, formatLength, ladderSeconds, ladderState, ROD_METRES_PER_UNIT, scaleBar, zoomAtTime, type LadderProfile } from '../core/scaleLadder'
@@ -77,7 +79,6 @@ interface SceneOverrides {
   boundaryImages: boolean
   showAxes: boolean
   showAngles: boolean
-  showCellEdges: boolean
 }
 
 /** 基元視圖只顯示一個晶胞；其他視圖依週期設定。 */
@@ -311,8 +312,8 @@ function buildScene(over?: SceneOverrides): SceneData {
   return {
     axes,
     atoms,
-    cellEdges: pieces ? [] : prismEdges ? prismEdges.outline.map(toCartPair) : generateCellEdges(repeat).map(toCartPair),
-    secondaryEdges: prismEdges && !pieces ? prismEdges.cellDividers.map(toCartPair) : [],
+    ...edgeLayersOf(pieces !== null, prismEdges, repeat, toCartPair),
+    secondaryEdges: [],
     demo: demoRunning,
     pieces,
     atomLayers,
@@ -330,8 +331,25 @@ function buildScene(over?: SceneOverrides): SceneData {
     linkDash: 0.04 * minLen,
     clipPlanes: clipping ? cellClipPlanes(basis, corner) : null,
     showAxes,
-    showCellEdges: over?.showCellEdges ?? ui.showCellEdges,
   }
+}
+
+/** 三層格線：一般為 gridLayers；六方柱以外框為「超晶胞外框」、晶胞分隔線為「格線」；拼裝演示不畫。 */
+function edgeLayersOf(
+  pieces: boolean,
+  prismEdges: ReturnType<typeof hexPrismEdges> | null,
+  repeat: RepeatSettings,
+  toCartPair: (p: [Vec3, Vec3]) => [Vec3, Vec3],
+): Pick<SceneData, 'edgeLayers' | 'frameDuplicatesCell'> {
+  if (pieces) return { edgeLayers: { cell: [], grid: [], frame: [] }, frameDuplicatesCell: false }
+  if (prismEdges) {
+    return {
+      edgeLayers: { cell: unitCellEdges().map(toCartPair), grid: prismEdges.cellDividers.map(toCartPair), frame: prismEdges.outline.map(toCartPair) },
+      frameDuplicatesCell: false,
+    }
+  }
+  const g = gridLayers(repeat)
+  return { edgeLayers: { cell: g.cell.map(toCartPair), grid: g.grid.map(toCartPair), frame: g.frame.map(toCartPair) }, frameDuplicatesCell: g.frameDuplicatesCell }
 }
 
 /** 依高度分層（由下往上），供逐層淡入。 */
@@ -456,7 +474,7 @@ function buildLadder(): LadderBuild {
   const half = Math.floor(BLOCK_CELLS / 2)
   const belowOne = toCart([0, 0, -1])
   const lattice = (viewMode: ViewMode, repeat: number, boundary: boolean, axes: boolean): SceneData =>
-    buildScene({ viewMode, repeat: [repeat, repeat, repeat], boundaryImages: boundary, showAxes: axes, showAngles: axes, showCellEdges: true })
+    buildScene({ viewMode, repeat: [repeat, repeat, repeat], boundaryImages: boundary, showAxes: axes, showAngles: axes })
   // 剖面的巨觀單位需與實際使用的物件一致（金屬棒 vs. 單晶外形）
   const profile = { ...demo.ladderProfile.value }
   profile.stages = profile.stages.map((st) => (st.id === 'macro' ? { ...st, metresPerUnit: macroMetresPerUnit } : st))
@@ -662,6 +680,70 @@ function onWheel(e: WheelEvent) {
   ui.demoTime = Math.min(total, Math.max(0, ui.demoTime + step))
 }
 
+// ───────────────────────── PNG 匯出 ─────────────────────────
+
+/** 以目前畫面輸出 PNG；附圖例時在下方加一條說明帶（名稱、晶胞參數與單位、來源、自訂標記、元素圖例）。 */
+function exportPng(legend: boolean) {
+  if (!renderer) return
+  const shot = renderer.captureImage()
+  const name = structure.workspace === 'design' ? (structure.draft?.title ?? t('panel.draftTitle')) : l(structure.source.name)
+  const file = `${safeFilename(name)}.png`
+  if (!legend) {
+    downloadDataUrl(file, shot)
+    return
+  }
+  const img = new Image()
+  img.onload = () => {
+    const scale = Math.max(1, Math.round(img.width / 640))
+    const pad = 14 * scale
+    const line = 20 * scale
+    const css = getComputedStyle(document.documentElement)
+    const font = getComputedStyle(document.body).fontFamily
+    const unit = structure.source.lengthUnit === 'Å' ? ' Å' : ''
+    const c = structure.cell
+    const symbol = structure.representation === 'cellSites' ? 'P' : structure.lattice.symbol
+    const lines = [
+      `a = ${c.a}${unit}  b = ${c.b}${unit}  c = ${c.c}${unit}  α = ${c.alpha}°  β = ${c.beta}°  γ = ${c.gamma}°  ·  ${symbol}`,
+      structure.workspace === 'design'
+        ? `${t('panel.custom')}  ·  ${t('png.source', { name: l(structure.source.name) })}`
+        : `${t('png.source', { name: `${l(structure.source.name)} · ${structure.source.nameEn}` })}${structure.source.reference ? `  ·  ${l(structure.source.reference)}` : ''}`,
+    ]
+    const elements = [...new Set(structure.basis.map((a) => a.element))]
+    const band = pad * 2 + line * (2 + lines.length)
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height + band
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = css.getPropertyValue('--bg').trim() || '#0a0d13'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0)
+    ctx.fillStyle = css.getPropertyValue('--text').trim() || '#eceef3'
+    ctx.font = `800 ${15 * scale}px ${font}`
+    let y = img.height + pad + 15 * scale
+    ctx.fillText(`${name}  —  CrystalScope`, pad, y)
+    ctx.font = `${12 * scale}px ${font}`
+    ctx.fillStyle = css.getPropertyValue('--text-2').trim() || '#c3c8d4'
+    for (const text of lines) {
+      y += line
+      ctx.fillText(text, pad, y)
+    }
+    y += line
+    let x = pad
+    for (const el of elements) {
+      ctx.fillStyle = elementStyle(el).color
+      ctx.beginPath()
+      ctx.arc(x + 6 * scale, y - 4 * scale, 5 * scale, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = css.getPropertyValue('--text-2').trim() || '#c3c8d4'
+      const label = `${el} ${l(elementStyle(el).name)}`
+      ctx.fillText(label, x + 16 * scale, y)
+      x += 16 * scale + ctx.measureText(label).width + 18 * scale
+    }
+    downloadDataUrl(file, canvas.toDataURL('image/png'))
+  }
+  img.src = shot
+}
+
 // ──────────────────────────────────────────────────────────────
 
 function resetView() {
@@ -770,6 +852,20 @@ onMounted(() => {
   watch(
     () => ui.autoRotating,
     (on) => renderer?.setAutoRotate(on),
+  )
+  // 外觀：只更新材質，不重建場景（故意不放進上面的 watchEffect）
+  watch(
+    () => ({
+      atomOpacity: ui.atomOpacity,
+      bondOpacity: ui.bondOpacity,
+      edges: { cell: { ...ui.edgeCell }, grid: { ...ui.edgeGrid }, frame: { ...ui.edgeFrame } },
+    }),
+    (a) => renderer?.setAppearance(a),
+    { immediate: true, deep: true },
+  )
+  watch(
+    () => ui.pngRequest,
+    (req) => req && exportPng(req.legend),
   )
   watch(
     () => ui.projection,

@@ -459,6 +459,27 @@ export const useStructureStore = defineStore('structure', () => {
     else clearDraft()
   })
 
+  /** 匯出目前草稿（設計模式）；教學模式回傳 null。 */
+  function exportDocument(): DesignDocument | null {
+    return toDocument()
+  }
+
+  /** 匯入已驗證的草稿文件：取代目前草稿並切到設計模式。回傳錯誤訊息或 null。 */
+  function importDocument(doc: DesignDocument): string | null {
+    const st = fromDocument(doc)
+    if (!st) return `unknown source example: ${doc.provenance?.exampleId ?? '(none)'}`
+    if (workspace.value === 'design') {
+      exampleId.value = st.exampleId
+      restore(st)
+      draft.value = st.draft
+      clearHistory()
+      return null
+    }
+    stashed = st
+    setWorkspace('design')
+    return null
+  }
+
   /** 是否有可還原的草稿（記憶體或本機保存）。 */
   const hasDraft = computed(() => workspace.value === 'design' || stashed !== null)
 
@@ -522,6 +543,8 @@ export const useStructureStore = defineStore('structure', () => {
     setRepeat,
     undo,
     redo,
+    exportDocument,
+    importDocument,
   }
 })
 

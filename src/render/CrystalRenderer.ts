@@ -1,5 +1,9 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js'
+import type { EdgeLayer } from '../core/grid'
 import { easeInOut } from '../core/easing'
 import type { Polyhedron } from '../core/habit'
 import type { ClipPlane } from '../core/lattice'
@@ -106,10 +110,40 @@ export interface DemoOpacity {
 }
 
 /** 渲染層只接收已換算好的直角座標，不做任何晶格計算。 */
+/** 三層格線的外觀；寬度（螢幕像素）固定、顏色與不透明度可調。 */
+export interface EdgeLayerStyle {
+  visible: boolean
+  color: string
+  opacity: number
+}
+
+/** 只動材質與 visible 的外觀設定：改變時不重建場景、不重算鄰居。 */
+export interface Appearance {
+  atomOpacity: number
+  bondOpacity: number
+  edges: Record<EdgeLayer, EdgeLayerStyle>
+}
+
+export const DEFAULT_APPEARANCE: Appearance = {
+  atomOpacity: 1,
+  bondOpacity: 1,
+  edges: {
+    cell: { visible: true, color: '#b3bbcb', opacity: 0.9 },
+    grid: { visible: true, color: '#7a8394', opacity: 0.55 },
+    frame: { visible: true, color: '#98a1b3', opacity: 0.8 },
+  },
+}
+
+/** 各層線寬（螢幕像素）；粗線用 LineSegments2，不依賴 WebGL 的 linewidth。 */
+const EDGE_WIDTH: Record<EdgeLayer, number> = { cell: 2.4, grid: 1.1, frame: 1.7 }
+
 export interface SceneData {
   axes: SceneAxis[]
   atoms: SceneAtom[]
-  cellEdges: [Vec3, Vec3][]
+  /** 三層格線（直角座標）：主晶胞、重複晶胞格線、超晶胞外框。 */
+  edgeLayers: Record<EdgeLayer, [Vec3, Vec3][]>
+  /** 1×1×1 時外框與主晶胞重合：主晶胞可見時外框不畫。 */
+  frameDuplicatesCell: boolean
   /** 次要邊線（例如六方柱內 3 個晶胞的分隔線），以虛線呈現。 */
   secondaryEdges: [Vec3, Vec3][]
   /** 折線（例如 120° 角弧）。 */
@@ -140,7 +174,6 @@ export interface SceneData {
   /** 非 null 時以這些平面裁切原子球體。 */
   clipPlanes: ClipPlane[] | null
   showAxes: boolean
-  showCellEdges: boolean
 }
 
 const ROTATION_MS = 650
@@ -210,6 +243,13 @@ export class CrystalRenderer {
   private atomLayerMaterials: THREE.Material[] = []
   private latticeLayerMaterials: THREE.Material[] = []
   private edgeMaterials: THREE.Material[] = []
+  /** 外觀（透明度、格線圖層）；update() 後重新套用，不需重建場景。 */
+  private appearance: Appearance = DEFAULT_APPEARANCE
+  private edgeLines: Partial<Record<EdgeLayer, LineSegments2>> = {}
+  private frameDuplicatesCell = false
+  /** 原子（含截面）材質與其基準不透明度；鍵材質。 */
+  private atomMaterials: THREE.Material[] = []
+  private bondMaterial: THREE.Material | null = null
   private pieceOffset = 0
   /** 拼裝完成才淡入的物件（例如跨塊的鍵）。 */
   private assemblyFinal: THREE.Material[] = []
@@ -262,21 +302,68 @@ export class CrystalRenderer {
 
   update(data: SceneData) {
     this.clearContent()
-    this.buildInto(this.content, data)
+    this.buildInto(this.content, data, true)
+    this.frameDuplicatesCell = data.frameDuplicatesCell
+    this.applyAppearance()
     this.controls.target.set(...data.center)
     this.controls.update()
     this.requestRender()
   }
 
-  /** 依場景資料把物件建入指定群組（一般檢視用 content，尺度之旅各級各一組）。 */
-  private buildInto(root: THREE.Group, data: SceneData) {
-    if (data.showCellEdges) {
-      const edges = [this.buildEdges(data.cellEdges)]
-      if (data.secondaryEdges.length) edges.push(this.buildLinks(data.secondaryEdges, data.linkDash, 0x7a8394))
-      for (const e of edges) {
-        if (data.demo) this.edgeMaterials.push(e.material as THREE.Material)
-        root.add(e)
-      }
+  /** 外觀變更：只更新材質與 visible；不重建場景、不重算鄰居。 */
+  setAppearance(appearance: Appearance) {
+    this.appearance = appearance
+    this.applyAppearance()
+    this.requestRender()
+  }
+
+  private applyAppearance() {
+    const a = this.appearance
+    for (const layer of ['cell', 'grid', 'frame'] as EdgeLayer[]) {
+      const obj = this.edgeLines[layer]
+      if (!obj) continue
+      const style = a.edges[layer]
+      const hiddenByCell = layer === 'frame' && this.frameDuplicatesCell && a.edges.cell.visible
+      obj.visible = style.visible && !hiddenByCell
+      const m = obj.material as LineMaterial
+      m.color.set(style.color)
+      m.opacity = style.opacity
+      m.userData.baseOpacity = style.opacity
+    }
+    for (const m of this.atomMaterials) {
+      const opacity = (m.userData.baseOpacity ?? 1) * a.atomOpacity
+      m.opacity = opacity
+      m.transparent = opacity < 0.999
+      m.depthWrite = opacity >= 0.999
+    }
+    if (this.bondMaterial) {
+      this.bondMaterial.opacity = a.bondOpacity
+      this.bondMaterial.transparent = a.bondOpacity < 0.999
+      this.bondMaterial.depthWrite = a.bondOpacity >= 0.999
+    }
+  }
+
+  /** 以目前畫面輸出 PNG（同一工作中先繪製再讀取，不需要 preserveDrawingBuffer）。 */
+  captureImage(): string {
+    this.draw()
+    return this.renderer.domElement.toDataURL('image/png')
+  }
+
+  /** 依場景資料把物件建入指定群組（一般檢視用 content，尺度之旅各級各一組）；track=true 時記錄材質供外觀設定。 */
+  private buildInto(root: THREE.Group, data: SceneData, track = false) {
+    for (const layer of ['cell', 'grid', 'frame'] as EdgeLayer[]) {
+      const segments = data.edgeLayers[layer]
+      if (!segments.length) continue
+      const style = this.appearance.edges[layer]
+      const lines = this.buildEdgeLayer(segments, layer, style)
+      if (track) this.edgeLines[layer] = lines
+      if (data.demo) this.edgeMaterials.push(lines.material as THREE.Material)
+      root.add(lines)
+    }
+    if (data.secondaryEdges.length) {
+      const e = this.buildLinks(data.secondaryEdges, data.linkDash, 0x7a8394)
+      if (data.demo) this.edgeMaterials.push(e.material as THREE.Material)
+      root.add(e)
     }
     if (data.showAxes) {
       for (const axis of data.axes) {
@@ -304,9 +391,15 @@ export class CrystalRenderer {
     const planes = data.clipPlanes?.map((p) => new THREE.Plane(new THREE.Vector3(...p.normal), p.constant)) ?? null
     const solid = data.atoms.filter((a) => !a.isBoundaryImage)
     const ghost = data.atoms.filter((a) => a.isBoundaryImage)
-    if (solid.length) root.add(this.buildAtoms(solid, 1, planes))
-    if (ghost.length) root.add(this.buildAtoms(ghost, 0.35, planes))
-    if (planes) this.buildCaps(solid, planes).forEach((m) => root.add(m))
+    const trackAtoms = (mesh: THREE.Mesh, base: number) => {
+      const m = mesh.material as THREE.Material
+      m.userData.baseOpacity = base
+      if (track) this.atomMaterials.push(m)
+      return mesh
+    }
+    if (solid.length) root.add(trackAtoms(this.buildAtoms(solid, 1, planes), 1))
+    if (ghost.length) root.add(trackAtoms(this.buildAtoms(ghost, 0.35, planes), 0.35))
+    if (planes) this.buildCaps(solid, planes).forEach((m) => root.add(trackAtoms(m, 1)))
     if (data.pieces) this.buildPieces(data.pieces, data.pieceOffset)
     const addLayers = (layers: SceneAtom[][], into: THREE.Material[]) =>
       layers.forEach((layer) => {
@@ -321,8 +414,9 @@ export class CrystalRenderer {
     addLayers(data.latticeLayers, this.latticeLayerMaterials)
     if (data.bonds.length) {
       const bonds = this.buildBonds(data.bonds, data.bondRadius)
+      const material = bonds.material as THREE.Material
+      if (track) this.bondMaterial = material
       if (data.demo) {
-        const material = bonds.material as THREE.Material
         material.transparent = true
         this.assemblyFinal.push(material)
       }
@@ -422,7 +516,7 @@ export class CrystalRenderer {
       face.visible = face.opacity > 0.001
     })
     const fade = (m: THREE.Material, opacity: number) => {
-      const base = m.userData.baseOpacity ?? 1
+      const base = (m.userData.baseOpacity ?? 1) * this.appearance.atomOpacity
       m.opacity = opacity * base
       m.visible = opacity > 0.001
       // 完全不透明時寫入深度，避免透明排序問題
@@ -649,6 +743,10 @@ export class CrystalRenderer {
     this.ortho.left = -halfH * (w / h)
     this.ortho.right = halfH * (w / h)
     this.ortho.updateProjectionMatrix()
+    // 粗線以螢幕像素定義寬度，需要知道畫布解析度
+    this.scene.traverse((o) => {
+      if (o instanceof LineSegments2) (o.material as LineMaterial).resolution.set(w, h)
+    })
     this.requestRender()
   }
 
@@ -661,6 +759,9 @@ export class CrystalRenderer {
     this.latticeLayerMaterials = []
     this.edgeMaterials = []
     this.assemblyFinal = []
+    this.edgeLines = {}
+    this.atomMaterials = []
+    this.bondMaterial = null
   }
 
   private disposeGroup(group: THREE.Group) {
@@ -950,6 +1051,17 @@ export class CrystalRenderer {
     const material = new THREE.LineDashedMaterial({ color, dashSize: dash, gapSize: dash * 0.7 })
     const lines = new THREE.LineSegments(geometry, material)
     lines.computeLineDistances()
+    return lines
+  }
+
+  /** 格線圖層：以螢幕像素寬度的粗線繪製（LineSegments2），不依賴一般 WebGL linewidth。 */
+  private buildEdgeLayer(segments: [Vec3, Vec3][], layer: EdgeLayer, style: EdgeLayerStyle) {
+    const geometry = new LineSegmentsGeometry().setPositions(segments.flat(2))
+    const material = new LineMaterial({ color: style.color, linewidth: EDGE_WIDTH[layer], transparent: true, opacity: style.opacity, worldUnits: false })
+    material.resolution.set(this.container.clientWidth || 1, this.container.clientHeight || 1)
+    material.userData.baseOpacity = style.opacity
+    const lines = new LineSegments2(geometry, material)
+    lines.visible = style.visible
     return lines
   }
 

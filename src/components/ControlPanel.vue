@@ -2,7 +2,9 @@
 import { computed, ref, watch } from 'vue'
 import type { AssemblyMode } from '../core/assembly'
 import { centeringTranslations, latticePointsPerCell } from '../core/centering'
-import { constrainedKeys, GEOMETRY_CONSTRAINTS, type GeometryConstraint } from '../core/design'
+import { constrainedKeys, GEOMETRY_CONSTRAINTS, parseDesignDocument, type GeometryConstraint } from '../core/design'
+import { computeStats } from '../core/stats'
+import { downloadText, readTextFile, safeFilename } from '../services/fileIo'
 import type { CellParams } from '../core/types'
 import { ELEMENTS, elementStyle } from '../data/elements'
 import { LATTICE_POINT_KINDS } from '../data/latticePointKinds'
@@ -55,7 +57,7 @@ const draftFrom = computed(() => {
 })
 
 /** 模組編號依目前可見的卡片連續排序，隱藏的模組不佔號。 */
-const MODULE_ORDER = ['composition', 'lattice', 'hex', 'params', 'spheres', 'cell', 'repeat', 'atom', 'direction', 'display'] as const
+const MODULE_ORDER = ['composition', 'lattice', 'hex', 'params', 'spheres', 'cell', 'repeat', 'stats', 'atom', 'direction', 'display'] as const
 const visibleModules = computed(() =>
   MODULE_ORDER.filter((id) => (id === 'hex' ? showHex.value : id === 'params' ? showParams.value : true)),
 )
@@ -143,6 +145,54 @@ const conflictText = computed(() =>
   structure.conflicts.map((c) => t(c.sameElement ? 'panel.conflictSame' : 'panel.conflictDiff', { a: c.a, b: c.b })),
 )
 
+// ── 統計（規格 6.5）：有效原子數不由含邊界複本的渲染清單累加 ──
+const stats = computed(() =>
+  computeStats({
+    cell: structure.cell,
+    basis: structure.basis,
+    centering: structure.centering,
+    representation: structure.representation,
+    cells: prismLocks.value ? 3 * structure.repeat.repeatC : structure.repeat.repeatA * structure.repeat.repeatB * structure.repeat.repeatC,
+    drawnPoints: (prismLocks.value ? structure.prismImages : structure.images).length,
+  }),
+)
+const volumeUnit = computed(() => (structure.source.lengthUnit === 'Å' ? 'Å³' : t('stats.unitSchematic') + '³'))
+const fmt = (v: number) => (Math.abs(v) >= 1000 ? v.toFixed(0) : v.toFixed(3))
+
+// ── 格線圖層 ──
+const LAYERS = [
+  { key: 'edgeCell', label: 'layer.cell' },
+  { key: 'edgeGrid', label: 'layer.grid' },
+  { key: 'edgeFrame', label: 'layer.frame' },
+] as const
+
+// ── JSON 匯入匯出 ──
+const fileInput = ref<HTMLInputElement>()
+const importError = ref<string | null>(null)
+function exportJson() {
+  const doc = structure.exportDocument()
+  if (!doc) return
+  downloadText(`${safeFilename(doc.title ?? t('panel.draftTitle'))}.json`, JSON.stringify(doc, null, 2))
+}
+async function onImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  importError.value = null
+  try {
+    const parsed = parseDesignDocument(JSON.parse(await readTextFile(file)))
+    if (!parsed.ok) {
+      importError.value = t('panel.importError', { reason: parsed.error })
+      return
+    }
+    const reason = structure.importDocument(parsed.doc)
+    if (reason) importError.value = t('panel.importError', { reason })
+  } catch (err) {
+    importError.value = t('panel.importError', { reason: err instanceof Error ? err.message : String(err) })
+  }
+}
+
 // ── 設計模式：鄰近連線規則 ──
 const newRule = ref({ a: '', b: '', d: 3 })
 function addRule() {
@@ -177,6 +227,11 @@ function addRule() {
         {{ t('panel.convertToCellSites') }}
       </button>
       <p v-if="draftFrom" class="note">{{ draftFrom }}</p>
+      <div class="copy-row">
+        <button class="small" @click="exportJson">{{ t('panel.exportJson') }}</button>
+        <button class="ghost small" :title="t('panel.importHint')" @click="fileInput?.click()">{{ t('panel.importJson') }}</button>
+      </div>
+      <p v-if="importError" class="error" role="alert">{{ importError }}</p>
       <details class="source-ref">
         <summary>{{ t('panel.sourceRef') }}</summary>
         <p class="note">{{ t('panel.sourceRefNote') }}</p>
@@ -213,8 +268,11 @@ function addRule() {
       <div class="copy-row">
         <button class="copy-btn" :title="t('panel.copyToDesignTitle')" @click="structure.copyToDesign()">{{ t('panel.copyToDesign') }}</button>
         <button class="ghost small" :title="t('panel.repMotifNote')" @click="structure.copyToDesign(structure.exampleId, 'motif')">{{ t('panel.copyMotif') }}</button>
+        <button class="ghost small" :title="t('panel.importHint')" @click="fileInput?.click()">{{ t('panel.importJson') }}</button>
       </div>
+      <p v-if="importError" class="error" role="alert">{{ importError }}</p>
     </section>
+    <input ref="fileInput" type="file" accept="application/json,.json" class="sr-only" @change="onImportFile" />
 
     <PanelCard data-tour="composition" :index="num('composition')" term="composition" icon="motif" accent="violet">
       <div class="segmented" role="group" :aria-label="t('panel.viewAria')">
@@ -443,6 +501,30 @@ function addRule() {
       <p v-else class="note">{{ t('panel.cellCount', { n: structure.repeat.repeatA * structure.repeat.repeatB * structure.repeat.repeatC }) }}</p>
     </PanelCard>
 
+    <PanelCard :index="num('stats')" term="stats" icon="stats" accent="amber">
+      <dl class="stats">
+        <dt>{{ t('stats.cellVolume') }}</dt>
+        <dd>{{ fmt(stats.cellVolume) }} {{ volumeUnit }}</dd>
+        <dt>{{ t('stats.cells') }}</dt>
+        <dd>{{ stats.cells }}</dd>
+        <dt>{{ t('stats.blockVolume') }}</dt>
+        <dd>{{ fmt(stats.blockVolume) }} {{ volumeUnit }}</dd>
+        <dt>{{ t('stats.perCell') }}</dt>
+        <dd>{{ stats.perCellAtoms }}<span v-if="stats.perCell.length > 1" class="muted">（{{ stats.perCell.map((c) => `${c.element} ${c.count}`).join('、') }}）</span></dd>
+        <dt>{{ t('stats.effective') }}</dt>
+        <dd>{{ stats.effectiveAtoms }}</dd>
+        <dt>{{ t('stats.drawn') }}</dt>
+        <dd>{{ stats.drawnPoints }}</dd>
+        <dt>{{ design ? t('stats.ratio') : t('stats.composition') }}</dt>
+        <dd>{{ stats.formula || '—' }}</dd>
+        <dt>{{ t('stats.perCellFormula') }}</dt>
+        <dd>{{ stats.perCellFormula || '—' }}</dd>
+      </dl>
+      <p v-if="stats.duplicates" class="note">{{ t('stats.duplicates', { n: stats.duplicates }) }}</p>
+      <p v-if="design" class="note">{{ t('stats.ratioNote') }}</p>
+      <p class="note">{{ t('stats.note') }}</p>
+    </PanelCard>
+
     <PanelCard :index="num('atom')" term="atomPosition" icon="atom" accent="violet">
       <template v-if="design">
         <p class="note">{{ t('panel.atomHint') }}</p>
@@ -484,7 +566,6 @@ function addRule() {
     </PanelCard>
 
     <PanelCard :index="num('display')" term="display" icon="display" accent="sky">
-      <label class="check"><input v-model="ui.showCellEdges" type="checkbox" /> {{ t('panel.cellEdges') }}</label>
       <label class="check"><input v-model="ui.showAxes" type="checkbox" /> {{ t('panel.axes') }}</label>
       <label class="check" :class="{ disabled: !ui.showAxes }">
         <input v-model="ui.showAngles" type="checkbox" :disabled="!ui.showAxes" /> {{ t('panel.angles') }}
@@ -500,6 +581,25 @@ function addRule() {
         </div>
       </div>
       <p v-if="ui.projection === 'perspective'" class="note">{{ t('panel.perspectiveNote') }}</p>
+      <!-- 三層格線：各自可見性、顏色、不透明度（只動材質，不重建場景） -->
+      <p class="sub-label">{{ t('panel.layers') }}</p>
+      <div v-for="layer in LAYERS" :key="layer.key" class="layer-row">
+        <label class="check"><input v-model="ui[layer.key].visible" type="checkbox" /> {{ t(layer.label) }}</label>
+        <input v-model="ui[layer.key].color" type="color" :aria-label="t('panel.layerColor')" />
+        <input v-model.number="ui[layer.key].opacity" type="range" min="0.1" max="1" step="0.05" :aria-label="t('panel.layerOpacity')" :disabled="!ui[layer.key].visible" />
+      </div>
+      <div class="param-row wide">
+        <label for="atom-opacity">{{ t('panel.atomOpacity') }}</label>
+        <input id="atom-opacity" v-model.number="ui.atomOpacity" type="range" min="0.1" max="1" step="0.05" />
+        <output>{{ Math.round(ui.atomOpacity * 100) }}%</output>
+      </div>
+      <div class="param-row wide">
+        <label for="bond-opacity">{{ t('panel.bondOpacity') }}</label>
+        <input id="bond-opacity" v-model.number="ui.bondOpacity" type="range" min="0.1" max="1" step="0.05" />
+        <output>{{ Math.round(ui.bondOpacity * 100) }}%</output>
+      </div>
+      <label class="check"><input v-model="ui.pngLegend" type="checkbox" /> {{ t('panel.pngLegend') }}</label>
+      <button class="small" @click="ui.requestPng(ui.pngLegend)">{{ t('panel.exportPng') }}</button>
     </PanelCard>
 
     <!-- 元素符號建議清單（設計模式的輸入框共用） -->
@@ -819,5 +919,45 @@ function addRule() {
   margin: 6px 0 0;
   font-size: 0.82rem;
   color: var(--rose);
+}
+.stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 12px;
+  margin: 0 0 8px;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+.stats dt {
+  color: var(--muted);
+}
+.stats dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 700;
+}
+.muted {
+  color: var(--muted);
+  font-weight: 500;
+}
+.layer-row {
+  display: grid;
+  grid-template-columns: 1fr 34px 90px;
+  align-items: center;
+  gap: 8px;
+}
+.layer-row .check {
+  margin: 4px 0;
+}
+.layer-row input[type='color'] {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+}
+.param-row.wide {
+  grid-template-columns: 7em 1fr 3.5em;
 }
 </style>
