@@ -246,6 +246,7 @@ export default {
   'nav.demo': 'デモ',
   'nav.controls': '操作',
   'nav.close': 'パネルを閉じる',
+  'nav.handle': 'ハンドル：下にドラッグしてパネルを閉じる（キーボード：Enter で閉じる）',
   'nav.more': 'その他',
   'constraint.free': '自由',
   'constraint.cubic': '立方（a = b = c、90°）',

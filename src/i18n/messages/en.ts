@@ -246,6 +246,7 @@ export default {
   'nav.demo': 'Demo',
   'nav.controls': 'Controls',
   'nav.close': 'Close panel',
+  'nav.handle': 'Handle: drag down to close the panel (keyboard: Enter closes)',
   'nav.more': 'More',
   'constraint.free': 'Free',
   'constraint.cubic': 'Cubic (a = b = c, 90°)',

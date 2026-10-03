@@ -246,6 +246,7 @@ export default {
   'nav.demo': '演示',
   'nav.controls': '控制',
   'nav.close': '收合面板',
+  'nav.handle': '把手：往下拖曳收合面板（鍵盤：Enter 收合）',
   'nav.more': '更多',
   'constraint.free': '自由',
   'constraint.cubic': '立方（a = b = c，90°）',

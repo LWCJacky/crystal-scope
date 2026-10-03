@@ -10,7 +10,7 @@ import ViewportCanvas from './components/ViewportCanvas.vue'
 import { useDemoClock } from './composables/useDemoClock'
 import { MOBILE_QUERY, useMediaQuery } from './composables/useMediaQuery'
 import { afterBoot } from './boot/report'
-import { onBeforeUnmount, onMounted, watch, watchEffect } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { useI18n } from './i18n'
 import { LOCALES } from './i18n/types'
 import { useUiStore } from './stores/ui'
@@ -36,6 +36,54 @@ function toggleSheet(id: (typeof TABS)[number]['id']) {
 watch(isMobile, (m) => {
   if (!m) ui.sheet = null
 })
+
+/**
+ * 面板把手：往下拖曳關閉（跟著手指、放開時依距離或速度決定），輕點也可關閉；往上拖有阻尼。
+ * 直接改 transform，不經 CSS 變數；拖曳中關掉過渡，放開時交回 CSS 的抽屜曲線。
+ */
+const sheetEl = ref<HTMLElement>()
+let drag: { id: number; startY: number; startT: number; prevY: number; prevT: number; lastY: number; lastT: number; moved: boolean } | null = null
+function onHandleDown(e: PointerEvent) {
+  if (drag || !e.isPrimary || !sheetEl.value) return
+  const now = performance.now()
+  drag = { id: e.pointerId, startY: e.clientY, startT: now, prevY: e.clientY, prevT: now, lastY: e.clientY, lastT: now, moved: false }
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  sheetEl.value.style.transition = 'none'
+}
+function onHandleMove(e: PointerEvent) {
+  if (!drag || e.pointerId !== drag.id || !sheetEl.value) return
+  const dy = e.clientY - drag.startY
+  if (Math.abs(dy) > 4) drag.moved = true
+  // 往上拖：阻尼（越拖越少），不會真的把面板拉高
+  const y = dy >= 0 ? dy : -Math.pow(-dy, 0.6)
+  sheetEl.value.style.transform = `translateY(${y}px)`
+  // 保留最後兩個樣本：放開瞬間位移為 0，速度要用前一段位移算
+  drag.prevY = drag.lastY
+  drag.prevT = drag.lastT
+  drag.lastY = e.clientY
+  drag.lastT = performance.now()
+}
+function onHandleUp(e: PointerEvent) {
+  if (!drag || e.pointerId !== drag.id || !sheetEl.value) return
+  const el = sheetEl.value
+  const dy = e.clientY - drag.startY
+  const elapsed = performance.now() - drag.startT
+  const velocity = (drag.lastY - drag.prevY) / Math.max(1, drag.lastT - drag.prevT) // px/ms，向下為正
+  // 輕點不關閉（依使用者要求）；只有往下拖過門檻或快速輕撥才收合
+  void elapsed
+  const dismiss = drag.moved && (dy > Math.min(120, el.offsetHeight * 0.3) || (dy > 24 && velocity > 0.3))
+  drag = null
+  // 同一次樣式重算裡：恢復過渡、清掉行內位移、切換狀態 → 從目前位置動畫到關閉或彈回
+  el.style.transition = ''
+  el.style.transform = ''
+  if (dismiss) ui.sheet = null
+}
+function onHandleCancel() {
+  if (!drag || !sheetEl.value) return
+  drag = null
+  sheetEl.value.style.transition = ''
+  sheetEl.value.style.transform = ''
+}
 
 // 介面語言：同步 <html lang>、頁面標題與 meta 描述
 watchEffect(() => {
@@ -81,8 +129,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <!-- 手機：底部分頁列（安全區內）＋ 從底部滑出的面板 -->
     <template v-else>
       <div class="scrim" :class="{ on: ui.sheet }" aria-hidden="true" @click="ui.sheet = null" />
-      <section class="sheet" :class="{ open: ui.sheet, compact: ui.tourOpen }" :aria-hidden="!ui.sheet" :aria-label="ui.sheet ? t(`nav.${ui.sheet}`) : undefined">
-        <button class="handle ghost" :aria-label="t('nav.close')" @click="ui.sheet = null"><span /></button>
+      <section ref="sheetEl" class="sheet" :class="{ open: ui.sheet, compact: ui.tourOpen }" :aria-hidden="!ui.sheet" :aria-label="ui.sheet ? t(`nav.${ui.sheet}`) : undefined">
+        <button
+          class="handle ghost"
+          :aria-label="t('nav.handle')"
+          @pointerdown="onHandleDown"
+          @pointermove="onHandleMove"
+          @pointerup="onHandleUp"
+          @pointercancel="onHandleCancel"
+          @keydown.enter.space.prevent="ui.sheet = null"
+        >
+          <span />
+        </button>
         <div class="sheet-body">
           <SystemList v-show="ui.sheet === 'examples'" class="panel" />
           <AnimationBar v-show="ui.sheet === 'demo'" class="sheet-bar" />
@@ -250,8 +308,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   display: grid;
   place-items: center;
   width: 100%;
-  padding: 10px 0 6px;
+  padding: 12px 0 8px;
   border-radius: 0;
+  /* 把手自己處理拖曳，瀏覽器不要攔走手勢 */
+  touch-action: none;
+  cursor: grab;
+}
+.handle:active {
+  cursor: grabbing;
+  transform: none;
 }
 .handle span {
   width: 40px;
