@@ -351,6 +351,35 @@ export class CrystalRenderer {
     }
   }
 
+  /** 相機與模型群組的方向（供視角方塊同步）。 */
+  getOrientation(): { camera: THREE.Quaternion; content: THREE.Quaternion } {
+    return { camera: this.active.quaternion.clone(), content: this.content.quaternion.clone() }
+  }
+
+  /** 從指定方向（content 座標）觀看模型：相機移到目標點的該側、距離不變（視角方塊的面／稜／角）。 */
+  viewFrom(direction: Vec3, reduced = false) {
+    if (this.ladderView) return
+    const dir = new THREE.Vector3(...direction).applyQuaternion(this.content.quaternion).normalize()
+    if (dir.lengthSq() === 0) return
+    const target = this.controls.target.clone()
+    const dist = this.active.position.distanceTo(target)
+    this.tweenCamera(target.clone().addScaledVector(dir, dist), target, this.ortho.zoom, reduced ? 0 : 400)
+  }
+
+  /** 以螢幕軸把視角轉 90°：horizontal 繞螢幕垂直軸（左右轉）、vertical 繞螢幕水平軸（上下翻）。 */
+  rotateView(axis: 'horizontal' | 'vertical', sign: 1 | -1, reduced = false) {
+    if (this.ladderView) return
+    const target = this.controls.target.clone()
+    const offset = this.active.position.clone().sub(target)
+    const dist = offset.length()
+    const column = axis === 'horizontal' ? 1 : 0
+    const about = new THREE.Vector3().setFromMatrixColumn(this.active.matrixWorld, column).normalize()
+    const rotated = offset.clone().applyAxisAngle(about, (sign * Math.PI) / 2).normalize()
+    // 上下翻到接近極點時略微偏離，避免 OrbitControls 在極點失去方位
+    if (axis === 'vertical' && Math.abs(rotated.z) > 0.999) rotated.add(offset.clone().normalize().multiplyScalar(0.02)).normalize()
+    this.tweenCamera(target.clone().addScaledVector(rotated, dist), target, this.ortho.zoom, reduced ? 0 : 400)
+  }
+
   /** 沿指定方向（content 座標）觀看：相機移到目標點的反方向、距離不變，視線 = 該方向。 */
   viewAlong(vector: Vec3, reduced = false) {
     if (this.ladderView) return

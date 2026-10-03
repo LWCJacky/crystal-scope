@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { directionVector, validateIndices } from '../core/direction'
 import { planePolygon, validateMiller } from '../core/plane'
 import { pieceCentroidAngle, pieceCount, pieceOutline, pieceSolid } from '../core/assembly'
@@ -40,11 +40,17 @@ import {
 import { useStructureStore } from '../stores/structure'
 import { useUiStore, type ViewMode } from '../stores/ui'
 import AtomCard from './AtomCard.vue'
+import ViewCube from './ViewCube.vue'
+import { MOBILE_QUERY, useMediaQuery } from '../composables/useMediaQuery'
 
 const structure = useStructureStore()
 const ui = useUiStore()
 const host = ref<HTMLDivElement>()
 let renderer: CrystalRenderer | null = null
+/** 給視角方塊用的渲染器參考與重繪計數（每次主畫面重繪 +1）。 */
+const rendererRef = shallowRef<CrystalRenderer | null>(null)
+const renderTick = ref(0)
+const isMobile = useMediaQuery(MOBILE_QUERY)
 
 const LATTICE_POINT_COLOR = '#c9ced8'
 const AXIS_COLORS = ['#d94848', '#3c9a4a', '#3b6fd1']
@@ -775,9 +781,11 @@ function resetView() {
 function rebuildRenderer() {
   renderer?.dispose()
   renderer = null
+  rendererRef.value = null
   ui.contextLost = false
   try {
     renderer = createRenderer()
+    rendererRef.value = renderer
     rendererGen.value++
     resetView()
   } catch {
@@ -791,7 +799,10 @@ function createRenderer(): CrystalRenderer {
   const r = new CrystalRenderer(host.value!)
   r.onContextLost = () => (ui.contextLost = true)
   r.onContextRestored = () => (ui.contextLost = false)
-  r.onRendered = followHovered
+  r.onRendered = () => {
+    followHovered()
+    renderTick.value++
+  }
   r.onUserInteract = () => {
     ui.autoRotating = false
     clearHover()
@@ -803,6 +814,7 @@ function createRenderer(): CrystalRenderer {
 onMounted(() => {
   try {
     renderer = createRenderer()
+    rendererRef.value = renderer
     bootReport('webgl')
   } catch (e) {
     bootFail('webgl', e instanceof Error ? e.message : undefined)
@@ -942,6 +954,8 @@ onBeforeUnmount(() => {
       :side="hoverSide"
       :color="hoverColor"
     />
+    <!-- 視角方塊：桌面、非尺度之旅時 -->
+    <ViewCube v-if="rendererRef && !isMobile && !ui.ladderOn && !ui.contextLost" :renderer="rendererRef" :tick="renderTick" @home="resetView" />
     <AtomCard :info="focused?.atom.info ?? null" docked :x="0" :y="0" :radius="0" side="right" :color="focusColor" @close="unfocusAtom" />
     <!-- 尺度之旅的比例尺：長度隨放大連續變化，是整段動畫的教學核心 -->
     <Transition name="fade">
