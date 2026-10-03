@@ -70,6 +70,8 @@ export const useStructureStore = defineStore('structure', () => {
   const neighborRules = ref<NeighborRule[]>([])
   const geometryConstraint = ref<GeometryConstraint>('free')
 
+  /** 作業模式的鎖定（由 assignment store 設定）：禁止匯入草稿／切換範例。 */
+  const locks = reactive({ imports: false, examples: false })
   const workspace = ref<Workspace>('learn')
   /** 設計模式的草稿中繼資料；教學模式為 null。 */
   const draft = ref<DraftMeta | null>(null)
@@ -202,6 +204,7 @@ export const useStructureStore = defineStore('structure', () => {
 
   /** 載入範例：教學模式顯示正式資料；設計模式則以該範例建立新草稿（取代目前草稿）。 */
   function loadExample(id: string) {
+    if (locks.examples && id !== exampleId.value) return
     if (workspace.value === 'design') {
       copyToDesign(id, 'cellSites')
       return
@@ -421,7 +424,9 @@ export const useStructureStore = defineStore('structure', () => {
   }
 
   /** 由本機保存的文件還原成暫存草稿（下次切到設計模式時載入）。 */
-  function fromDocument(doc: DesignDocument): StashedDraft | null {
+  function fromDocument(input: DesignDocument): StashedDraft | null {
+    // 來源可能是響應式物件（例如 store 裡的繳交檔）：先轉成純 JSON，之後 structuredClone 才不會碰到 Proxy
+    const doc = JSON.parse(JSON.stringify(input)) as DesignDocument
     const id = doc.provenance?.exampleId ?? DEFAULT_EXAMPLE
     let s
     try {
@@ -448,15 +453,27 @@ export const useStructureStore = defineStore('structure', () => {
   if (saved) stashed = fromDocument(saved)
 
   let saveTimer = 0
+  let pendingSave: DesignDocument | null = null
+  const flushSave = () => {
+    clearTimeout(saveTimer)
+    if (pendingSave) saveDraft(pendingSave)
+    pendingSave = null
+  }
+  // 監看響應式來源本身（deep）而不是 toDocument() 的結果：snapshot() 透過 toRaw 讀取，
+  // 不會追蹤原子內部欄位（元素、座標）的變動
   watch(
-    () => (workspace.value === 'design' ? toDocument() : null),
-    (doc) => {
+    () => [workspace.value, draft.value, cell.value, basis.value, params.value, latticeSymbol.value, representation.value, neighborRules.value, geometryConstraint.value],
+    () => {
       clearTimeout(saveTimer)
-      if (!doc) return
-      saveTimer = window.setTimeout(() => saveDraft(doc), AUTOSAVE_MS)
+      pendingSave = workspace.value === 'design' ? toDocument() : null
+      if (!pendingSave) return
+      saveTimer = window.setTimeout(flushSave, AUTOSAVE_MS)
     },
     { deep: true },
   )
+  // 關閉分頁或切到背景時立即保存，避免最後幾百毫秒的編輯遺失
+  window.addEventListener('pagehide', flushSave)
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushSave())
   /** 切回教學模式時也要保存暫存的草稿（上面的 watch 在教學模式看不到草稿內容）。 */
   watch(workspace, (w) => {
     if (w !== 'learn') return
@@ -471,6 +488,7 @@ export const useStructureStore = defineStore('structure', () => {
 
   /** 匯入已驗證的草稿文件：取代目前草稿並切到設計模式。回傳錯誤訊息或 null。 */
   function importDocument(doc: DesignDocument): string | null {
+    if (locks.imports) return 'locked by assignment mode'
     const st = fromDocument(doc)
     if (!st) return `unknown source example: ${doc.provenance?.exampleId ?? '(none)'}`
     if (workspace.value === 'design') {
@@ -498,6 +516,7 @@ export const useStructureStore = defineStore('structure', () => {
     representation,
     neighborRules,
     geometryConstraint,
+    locks,
     workspace,
     draft,
     editable,

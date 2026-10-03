@@ -8,10 +8,12 @@ import { directionVector, formatIndices, validateIndices } from '../core/directi
 import { formatMiller, fourIndexPlane, planeGeometry, planePolygon, validateMiller } from '../core/plane'
 import { toFourIndex } from '../core/hexagonal'
 import { downloadText, readTextFile, safeFilename } from '../services/fileIo'
+import { decryptWithPassword, encryptWithPassword, isPasswordEnvelope } from '../core/crypto'
 import type { CellParams } from '../core/types'
 import { ELEMENTS, elementStyle } from '../data/elements'
 import { LATTICE_POINT_KINDS } from '../data/latticePointKinds'
 import { useStructureStore } from '../stores/structure'
+import { useAssignmentStore } from '../stores/assignment'
 import { useUiStore, type ViewMode } from '../stores/ui'
 import { playDemo } from '../composables/useDemo'
 import KnowledgeHint from './KnowledgeHint.vue'
@@ -21,6 +23,7 @@ import { useI18n } from '../i18n'
 
 const structure = useStructureStore()
 const ui = useUiStore()
+const assignment = useAssignmentStore()
 
 const { t, l, term, termParts, locale } = useI18n()
 const unit = computed(() => (structure.source.lengthUnit === 'Å' ? ' Å' : ''))
@@ -170,13 +173,31 @@ const LAYERS = [
   { key: 'edgeFrame', label: 'layer.frame' },
 ] as const
 
-// ── JSON 匯入匯出 ──
+// ── 草稿匯入匯出（可選密碼加密：PBKDF2 + AES-GCM，純前端） ──
 const fileInput = ref<HTMLInputElement>()
 const importError = ref<string | null>(null)
-function exportJson() {
+const exportPassword = ref('')
+/** 匯入到加密檔時暫存，等使用者輸入密碼。 */
+const pendingEncrypted = ref<unknown>(null)
+const importPassword = ref('')
+async function exportJson() {
   const doc = structure.exportDocument()
   if (!doc) return
-  downloadText(`${safeFilename(doc.title ?? t('panel.draftTitle'))}${DRAFT_EXTENSION}`, JSON.stringify(doc, null, 2))
+  const name = `${safeFilename(doc.title ?? t('panel.draftTitle'))}${DRAFT_EXTENSION}`
+  const text = JSON.stringify(doc, null, 2)
+  if (exportPassword.value) {
+    downloadText(name, JSON.stringify(await encryptWithPassword(text, exportPassword.value)))
+    exportPassword.value = ''
+  } else downloadText(name, text)
+}
+function applyImported(json: unknown) {
+  const parsed = parseDesignDocument(json)
+  if (!parsed.ok) {
+    importError.value = t('panel.importError', { reason: parsed.error })
+    return
+  }
+  const reason = structure.importDocument(parsed.doc)
+  if (reason) importError.value = t('panel.importError', { reason })
 }
 async function onImportFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -184,16 +205,27 @@ async function onImportFile(e: Event) {
   input.value = ''
   if (!file) return
   importError.value = null
+  pendingEncrypted.value = null
   try {
-    const parsed = parseDesignDocument(JSON.parse(await readTextFile(file)))
-    if (!parsed.ok) {
-      importError.value = t('panel.importError', { reason: parsed.error })
+    const json = JSON.parse(await readTextFile(file))
+    if (isPasswordEnvelope(json)) {
+      pendingEncrypted.value = json
       return
     }
-    const reason = structure.importDocument(parsed.doc)
-    if (reason) importError.value = t('panel.importError', { reason })
+    applyImported(json)
   } catch (err) {
     importError.value = t('panel.importError', { reason: err instanceof Error ? err.message : String(err) })
+  }
+}
+async function decryptImport() {
+  if (!isPasswordEnvelope(pendingEncrypted.value)) return
+  try {
+    applyImported(JSON.parse(await decryptWithPassword(pendingEncrypted.value, importPassword.value)))
+    pendingEncrypted.value = null
+  } catch {
+    importError.value = t('panel.importError', { reason: t('panel.wrongPassword') })
+  } finally {
+    importPassword.value = ''
   }
 }
 
@@ -253,6 +285,18 @@ function addRule() {
 
 <template>
   <aside class="control-panel" :aria-label="t('panel.aria')">
+    <!-- 作業模式橫幅：學生進行中／老師檢視中 -->
+    <section v-if="assignment.mode === 'student' && assignment.assignment" class="assign-banner">
+      <p class="eyebrow">{{ t('assign.bannerStudent') }}</p>
+      <b>{{ assignment.assignment.assignment.title }}</b>
+      <span class="muted">{{ [assignment.identity.studentId, assignment.identity.name].filter(Boolean).join(' · ') }}</span>
+      <p class="note">{{ t('assign.bannerNote') }}</p>
+    </section>
+    <section v-else-if="assignment.mode === 'teacher' && assignment.viewing !== null" class="assign-banner">
+      <p class="eyebrow">{{ t('assign.bannerTeacher') }}</p>
+      <b>{{ assignment.submissions[assignment.viewing]?.result?.payload.identity.studentId }} {{ assignment.submissions[assignment.viewing]?.result?.payload.identity.name }}</b>
+      <span class="muted">{{ assignment.submissions[assignment.viewing]?.result?.verified ? t('assign.verifiedYes') : t('assign.verifiedNo') }}</span>
+    </section>
     <!-- 設計模式：草稿是有效資料，來源說明只作追溯（FIX-04） -->
     <section v-if="design" class="hero">
       <p class="eyebrow">{{ t('panel.heroDraft') }}</p>
@@ -277,7 +321,12 @@ function addRule() {
       <p v-if="draftFrom" class="note">{{ draftFrom }}</p>
       <div class="copy-row">
         <button class="small" @click="exportJson">{{ t('panel.exportJson') }}</button>
-        <button class="ghost small" :title="t('panel.importHint')" @click="fileInput?.click()">{{ t('panel.importJson') }}</button>
+        <input v-model="exportPassword" class="pw" type="password" autocomplete="new-password" :placeholder="t('panel.draftPassword')" :aria-label="t('panel.draftPassword')" />
+        <button v-if="!structure.locks.imports" class="ghost small" :title="t('panel.importHint')" @click="fileInput?.click()">{{ t('panel.importJson') }}</button>
+      </div>
+      <div v-if="pendingEncrypted" class="copy-row">
+        <input v-model="importPassword" class="pw" type="password" autocomplete="current-password" :placeholder="t('panel.importPassword')" :aria-label="t('panel.importPassword')" @keydown.enter.prevent="decryptImport" />
+        <button class="small" @click="decryptImport">{{ t('panel.decrypt') }}</button>
       </div>
       <p v-if="importError" class="error" role="alert">{{ importError }}</p>
       <details class="source-ref">
@@ -316,7 +365,11 @@ function addRule() {
       <div class="copy-row">
         <button class="copy-btn" :title="t('panel.copyToDesignTitle')" @click="structure.copyToDesign()">{{ t('panel.copyToDesign') }}</button>
         <button class="ghost small" :title="t('panel.repMotifNote')" @click="structure.copyToDesign(structure.exampleId, 'motif')">{{ t('panel.copyMotif') }}</button>
-        <button class="ghost small" :title="t('panel.importHint')" @click="fileInput?.click()">{{ t('panel.importJson') }}</button>
+        <button v-if="!structure.locks.imports" class="ghost small" :title="t('panel.importHint')" @click="fileInput?.click()">{{ t('panel.importJson') }}</button>
+      </div>
+      <div v-if="pendingEncrypted" class="copy-row">
+        <input v-model="importPassword" class="pw" type="password" autocomplete="current-password" :placeholder="t('panel.importPassword')" :aria-label="t('panel.importPassword')" @keydown.enter.prevent="decryptImport" />
+        <button class="small" @click="decryptImport">{{ t('panel.decrypt') }}</button>
       </div>
       <p v-if="importError" class="error" role="alert">{{ importError }}</p>
     </section>
@@ -976,6 +1029,39 @@ function addRule() {
 .param-ref {
   font-size: 0.84rem;
   color: var(--muted);
+}
+.assign-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--amber);
+  border-left-width: 3px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  font-size: 0.86rem;
+}
+.assign-banner .eyebrow {
+  margin: 0 0 2px;
+}
+.assign-banner .muted {
+  margin-left: 8px;
+}
+.assign-banner .note {
+  margin: 4px 0 0;
+}
+.pw {
+  min-height: 30px;
+  max-width: 11em;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.pw:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 /* 隱藏的檔案選擇器：只透過「匯入 JSON」按鈕觸發，視覺上不佔位 */
 .sr-only {

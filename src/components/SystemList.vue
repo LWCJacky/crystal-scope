@@ -26,7 +26,7 @@ const GROUPS = [
       </header>
       <ul :style="{ '--accent': `var(--${g.accent})` }">
         <li v-for="s in g.items" :key="s.id">
-          <button class="item" :aria-current="structure.exampleId === s.id" @click="selectExample(s.id)">
+          <button class="item" :aria-current="structure.exampleId === s.id" :disabled="structure.locks.examples && structure.exampleId !== s.id" :title="structure.locks.examples ? t('assign.lockedExamples') : undefined" @click="selectExample(s.id)">
             <span class="zh">{{ l(s.name) }}</span>
             <span v-if="s.group !== 'system' || s.nameEn !== l(s.name)" class="tag">{{ s.group === 'system' ? s.nameEn : s.lattices[0].symbol }}</span>
           </button>

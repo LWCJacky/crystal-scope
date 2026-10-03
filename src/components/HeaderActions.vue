@@ -4,6 +4,8 @@ import { useStructureStore } from '../stores/structure'
 import { useUiStore } from '../stores/ui'
 import SettingsDialog from './SettingsDialog.vue'
 import AboutDialog from './AboutDialog.vue'
+import AssignmentDialog from './AssignmentDialog.vue'
+import { useAssignmentStore } from '../stores/assignment'
 import { useI18n } from '../i18n'
 import { LOCALES } from '../i18n/types'
 import { useSettingsStore } from '../stores/settings'
@@ -20,6 +22,8 @@ const settings = useSettingsStore()
 const { t } = useI18n()
 const settingsDialog = ref<InstanceType<typeof SettingsDialog>>()
 const aboutDialog = ref<InstanceType<typeof AboutDialog>>()
+const assignmentDialog = ref<InstanceType<typeof AssignmentDialog>>()
+const assignment = useAssignmentStore()
 
 function reset() {
   structure.resetExample()
@@ -72,11 +76,13 @@ function reset() {
       <div class="buttons">
         <button data-tour="settings" :title="t('header.settingsTitle')" @click="settingsDialog?.open()">{{ t('header.settings') }}</button>
         <button data-tour="about" :title="t('header.aboutTitle')" @click="aboutDialog?.open()">{{ t('header.about') }}</button>
+        <button data-tour="assignment" :class="{ 'assign-on': assignment.mode !== 'off' }" :title="t('header.assignmentTitle')" @click="assignmentDialog?.open()">{{ t('header.assignment') }}</button>
         <button data-tour="help" class="primary" :title="t('header.helpTitle')" @click="ui.openTour()">{{ t('header.help') }}</button>
       </div>
     </div>
     <SettingsDialog ref="settingsDialog" />
     <AboutDialog ref="aboutDialog" />
+    <AssignmentDialog ref="assignmentDialog" />
   </nav>
 </template>
 
@@ -92,6 +98,11 @@ function reset() {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+/* 作業模式進行中：按鈕以琥珀色標示 */
+.assign-on {
+  border-color: var(--amber);
+  color: var(--amber);
 }
 .divider {
   width: 1px;
