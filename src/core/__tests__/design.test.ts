@@ -56,6 +56,7 @@ describe('同位置原子', () => {
 
 describe('草稿 JSON 驗證（規格 8.1 #12）', () => {
   const good: DesignDocument = {
+    format: 'crystalscope-draft',
     schemaVersion: 1,
     id: 'd1',
     title: null,
@@ -74,6 +75,7 @@ describe('草稿 JSON 驗證（規格 8.1 #12）', () => {
   })
   it.each([
     ['未知版本', { ...good, schemaVersion: 2 }, 'schemaVersion'],
+    ['非本專案格式', { ...good, format: 'other-app' }, 'not a CrystalScope draft'],
     ['NaN', { ...good, cell: { ...good.cell, a: Number.NaN } }, 'cell.a'],
     ['無限值', { ...good, representation: { kind: 'cellSites', atoms: [{ id: 'x1', element: 'Cu', fractionalPosition: [Infinity, 0, 0] }] } }, 'fractionalPosition'],
     ['非法晶胞', { ...good, cell: { a: 1, b: 1, c: 1, alpha: 130, beta: 130, gamma: 130 } }, 'invalid cell'],

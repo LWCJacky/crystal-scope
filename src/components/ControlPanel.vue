@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { AssemblyMode } from '../core/assembly'
 import { centeringTranslations, latticePointsPerCell } from '../core/centering'
-import { constrainedKeys, GEOMETRY_CONSTRAINTS, parseDesignDocument, type GeometryConstraint } from '../core/design'
+import { constrainedKeys, DRAFT_EXTENSION, GEOMETRY_CONSTRAINTS, parseDesignDocument, type GeometryConstraint } from '../core/design'
 import { computeStats } from '../core/stats'
 import { directionVector, formatIndices, validateIndices } from '../core/direction'
 import { formatMiller, fourIndexPlane, planeGeometry, planePolygon, validateMiller } from '../core/plane'
@@ -176,7 +176,7 @@ const importError = ref<string | null>(null)
 function exportJson() {
   const doc = structure.exportDocument()
   if (!doc) return
-  downloadText(`${safeFilename(doc.title ?? t('panel.draftTitle'))}.json`, JSON.stringify(doc, null, 2))
+  downloadText(`${safeFilename(doc.title ?? t('panel.draftTitle'))}${DRAFT_EXTENSION}`, JSON.stringify(doc, null, 2))
 }
 async function onImportFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -320,7 +320,7 @@ function addRule() {
       </div>
       <p v-if="importError" class="error" role="alert">{{ importError }}</p>
     </section>
-    <input ref="fileInput" type="file" accept="application/json,.json" class="sr-only" @change="onImportFile" />
+    <input ref="fileInput" type="file" :accept="`${DRAFT_EXTENSION},.json,application/json`" class="sr-only" @change="onImportFile" />
 
     <PanelCard data-tour="composition" :index="num('composition')" term="composition" icon="motif" accent="violet">
       <div class="segmented" role="group" :aria-label="t('panel.viewAria')">

@@ -32,7 +32,12 @@ export type AtomRepresentation =
   | { kind: 'motif'; centering: Centering; atoms: AtomSite[] }
   | { kind: 'cellSites'; atoms: AtomSite[] }
 
+/** 草稿檔的格式標記與副檔名：檔案選擇器只列出 .csdraft，內容仍是 JSON；改名後仍可由 format 辨識。 */
+export const DRAFT_FORMAT = 'crystalscope-draft'
+export const DRAFT_EXTENSION = '.csdraft'
+
 export interface DesignDocument {
+  format: typeof DRAFT_FORMAT
   schemaVersion: 1
   id: string
   title: string | null
@@ -131,6 +136,7 @@ export function parseDesignDocument(input: unknown): ParseResult {
   const fail = (error: string): ParseResult => ({ ok: false, error })
   if (!input || typeof input !== 'object') return fail('not an object')
   const d = input as Record<string, unknown>
+  if (d.format !== undefined && d.format !== DRAFT_FORMAT) return fail(`not a CrystalScope draft (format: ${String(d.format)})`)
   if (d.schemaVersion !== 1) return fail(`unsupported schemaVersion: ${String(d.schemaVersion)}`)
   if (typeof d.id !== 'string' || !d.id) return fail('missing id')
   if (d.title !== null && d.title !== undefined && typeof d.title !== 'string') return fail('title must be a string or null')
@@ -189,6 +195,7 @@ export function parseDesignDocument(input: unknown): ParseResult {
   return {
     ok: true,
     doc: {
+      format: DRAFT_FORMAT,
       schemaVersion: 1,
       id: d.id,
       title: (d.title as string | null | undefined) ?? null,

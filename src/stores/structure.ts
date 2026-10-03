@@ -3,6 +3,7 @@ import { computed, reactive, ref, toRaw, watch } from 'vue'
 import { type Centering } from '../core/centering'
 import {
   applyGeometryConstraint,
+  DRAFT_FORMAT,
   expandToCellSites,
   nextAtomId,
   siteConflicts,
@@ -398,6 +399,7 @@ export const useStructureStore = defineStore('structure', () => {
     const atoms = st.basis.map((a) => ({ id: a.id, element: a.element, fractionalPosition: [...a.fractionalPosition] as Vec3 }))
     const lat = s.lattices.find((l) => l.symbol === st.latticeSymbol) ?? s.lattices[0]
     return {
+      format: DRAFT_FORMAT,
       schemaVersion: 1,
       id: st.draft.provenance ? `${st.draft.provenance.exampleId}-${st.draft.provenance.copiedAt}` : 'draft',
       title: st.draft.title,
