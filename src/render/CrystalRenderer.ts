@@ -137,9 +137,17 @@ export const DEFAULT_APPEARANCE: Appearance = {
 /** 各層線寬（螢幕像素）；粗線用 LineSegments2，不依賴 WebGL 的 linewidth。 */
 const EDGE_WIDTH: Record<EdgeLayer, number> = { cell: 2.4, grid: 1.1, frame: 1.7 }
 
+/** 晶面截面：已排序的多邊形（直角座標），扇形三角化後以半透明雙面呈現。 */
+export interface ScenePlane {
+  points: Vec3[]
+  color: string
+  opacity: number
+}
+
 export interface SceneData {
   axes: SceneAxis[]
   atoms: SceneAtom[]
+  planes: ScenePlane[]
   /** 三層格線（直角座標）：主晶胞、重複晶胞格線、超晶胞外框。 */
   edgeLayers: Record<EdgeLayer, [Vec3, Vec3][]>
   /** 1×1×1 時外框與主晶胞重合：主晶胞可見時外框不畫。 */
@@ -343,6 +351,17 @@ export class CrystalRenderer {
     }
   }
 
+  /** 沿指定方向（content 座標）觀看：相機移到目標點的反方向、距離不變，視線 = 該方向。 */
+  viewAlong(vector: Vec3, reduced = false) {
+    if (this.ladderView) return
+    const dir = new THREE.Vector3(...vector).applyQuaternion(this.content.quaternion).normalize()
+    if (!Number.isFinite(dir.lengthSq()) || dir.lengthSq() === 0) return
+    const target = this.controls.target.clone()
+    const dist = this.active.position.distanceTo(target)
+    const position = target.clone().addScaledVector(dir, -dist)
+    this.tweenCamera(position, target, this.ortho.zoom, reduced ? 0 : 500)
+  }
+
   /** 以目前畫面輸出 PNG（同一工作中先繪製再讀取，不需要 preserveDrawingBuffer）。 */
   captureImage(): string {
     this.draw()
@@ -387,6 +406,7 @@ export class CrystalRenderer {
       root.add(obj)
     }
     if (data.polyhedron) this.buildPolyhedron(data.polyhedron).forEach((o) => root.add(o))
+    for (const plane of data.planes) this.buildPlane(plane).forEach((o) => root.add(o))
 
     const planes = data.clipPlanes?.map((p) => new THREE.Plane(new THREE.Vector3(...p.normal), p.constant)) ?? null
     const solid = data.atoms.filter((a) => !a.isBoundaryImage)
@@ -1113,6 +1133,26 @@ export class CrystalRenderer {
   }
 
   /** 半透明實心多面體＋稜線，內部原子仍可看見。 */
+  /** 晶面：多邊形扇形三角化＋外框線；雙面、半透明、不寫深度（不遮擋原子）。 */
+  private buildPlane({ points, color, opacity }: ScenePlane): THREE.Object3D[] {
+    if (points.length < 3) return []
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(points.flat(), 3))
+    const index: number[] = []
+    for (let i = 1; i + 1 < points.length; i++) index.push(0, i, i + 1)
+    geometry.setIndex(index)
+    geometry.computeVertexNormals()
+    const mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({ color, transparent: true, opacity, roughness: 0.3, metalness: 0, side: THREE.DoubleSide, depthWrite: false }),
+    )
+    const outline = new THREE.LineLoop(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(points.flat(), 3)),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: Math.min(1, opacity + 0.45) }),
+    )
+    return [mesh, outline]
+  }
+
   private buildPolyhedron({ vertices, faces, edges, color }: ScenePolyhedron, opacity = 0.28) {
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices.flat(), 3))

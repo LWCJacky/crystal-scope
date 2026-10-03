@@ -4,6 +4,9 @@ import type { AssemblyMode } from '../core/assembly'
 import { centeringTranslations, latticePointsPerCell } from '../core/centering'
 import { constrainedKeys, GEOMETRY_CONSTRAINTS, parseDesignDocument, type GeometryConstraint } from '../core/design'
 import { computeStats } from '../core/stats'
+import { directionVector, formatIndices, validateIndices } from '../core/direction'
+import { formatMiller, fourIndexPlane, planeGeometry, planePolygon, validateMiller } from '../core/plane'
+import { toFourIndex } from '../core/hexagonal'
 import { downloadText, readTextFile, safeFilename } from '../services/fileIo'
 import type { CellParams } from '../core/types'
 import { ELEMENTS, elementStyle } from '../data/elements'
@@ -11,6 +14,7 @@ import { LATTICE_POINT_KINDS } from '../data/latticePointKinds'
 import { useStructureStore } from '../stores/structure'
 import { useUiStore, type ViewMode } from '../stores/ui'
 import { playDemo } from '../composables/useDemo'
+import KnowledgeHint from './KnowledgeHint.vue'
 import MotifTable from './MotifTable.vue'
 import PanelCard from './PanelCard.vue'
 import { useI18n } from '../i18n'
@@ -57,7 +61,7 @@ const draftFrom = computed(() => {
 })
 
 /** 模組編號依目前可見的卡片連續排序，隱藏的模組不佔號。 */
-const MODULE_ORDER = ['composition', 'lattice', 'hex', 'params', 'spheres', 'cell', 'repeat', 'stats', 'atom', 'direction', 'display'] as const
+const MODULE_ORDER = ['composition', 'lattice', 'hex', 'params', 'spheres', 'cell', 'repeat', 'stats', 'atom', 'direction', 'plane', 'display'] as const
 const visibleModules = computed(() =>
   MODULE_ORDER.filter((id) => (id === 'hex' ? showHex.value : id === 'params' ? showParams.value : true)),
 )
@@ -193,6 +197,49 @@ async function onImportFile(e: Event) {
   }
 }
 
+// ── 晶向 [uvw]（共用觀察工具，不移動原子）──
+const DIRECTION_PRESETS: [number, number, number][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 1, 1]]
+const dirValidation = computed(() => validateIndices(structure.direction.u, structure.direction.v, structure.direction.w))
+const dirText = computed(() => (dirValidation.value.valid ? formatIndices(structure.direction.u, structure.direction.v, structure.direction.w) : ''))
+/** 六方晶系的四指數 [uvtw]：三指數換算後乘 3 化為整數再約分。 */
+const dirFourIndex = computed(() => {
+  if (!showHex.value || !dirValidation.value.valid) return ''
+  const raw = toFourIndex(structure.direction.u, structure.direction.v, structure.direction.w)
+  const scaled = raw.map((x) => Math.round(x * 3))
+  const g = scaled.reduce((acc, x) => { let a = Math.abs(acc); let b = Math.abs(x); while (b) [a, b] = [b, a % b]; return a }, 0) || 1
+  const fmt = (n: number) => (n < 0 ? `${-n}̄` : `${n}`)
+  return `[${scaled.map((x) => fmt(x / g)).join('')}]`
+})
+function setDirection(u: number, v: number, w: number) {
+  structure.direction = { ...structure.direction, u, v, w }
+}
+function viewAlong() {
+  if (!dirValidation.value.valid) return
+  const v = directionVector(structure.latticeBasis, structure.direction.u, structure.direction.v, structure.direction.w)
+  ui.requestViewAlong(v)
+}
+
+// ── 晶面 (hkl)：序號 m 與物理平移分開；(000) 拒絕；無交集提示 ──
+const PLANE_PRESETS: [number, number, number][] = [[1, 0, 0], [1, 1, 0], [1, 1, 1], [2, 0, 0]]
+const planeValidation = computed(() => validateMiller(structure.plane.h, structure.plane.k, structure.plane.l))
+const planeText = computed(() => (planeValidation.value.valid ? formatMiller(structure.plane.h, structure.plane.k, structure.plane.l) : ''))
+const planeFourIndex = computed(() => {
+  if (!showHex.value || !planeValidation.value.valid) return ''
+  const fmt = (n: number) => (n < 0 ? `${-n}̄` : `${n}`)
+  return `(${fourIndexPlane(structure.plane.h, structure.plane.k, structure.plane.l).map(fmt).join('')})`
+})
+const planeSpacing = computed(() => (planeValidation.value.valid ? planeGeometry(structure.latticeBasis, structure.plane.h, structure.plane.k, structure.plane.l).spacing : 0))
+const planeHasSection = computed(() => {
+  if (!planeValidation.value.valid) return false
+  const p = structure.plane
+  const margin = p.clip ? 0 : 1
+  const r = structure.repeat
+  return planePolygon(structure.latticeBasis, p.h, p.k, p.l, p.m, p.shift, { min: [-margin, -margin, -margin], max: [r.repeatA + margin, r.repeatB + margin, r.repeatC + margin] }).length >= 3
+})
+function setPlane(h: number, k: number, l: number) {
+  structure.plane = { ...structure.plane, h, k, l }
+}
+
 // ── 設計模式：鄰近連線規則 ──
 const newRule = ref({ a: '', b: '', d: 3 })
 function addRule() {
@@ -226,6 +273,7 @@ function addRule() {
       <button v-if="structure.representation === 'motif'" class="ghost small" :title="t('panel.convertNote')" @click="structure.convertToCellSites()">
         {{ t('panel.convertToCellSites') }}
       </button>
+      <KnowledgeHint id="representation" />
       <p v-if="draftFrom" class="note">{{ draftFrom }}</p>
       <div class="copy-row">
         <button class="small" @click="exportJson">{{ t('panel.exportJson') }}</button>
@@ -307,6 +355,7 @@ function addRule() {
         </button>
       </div>
       <p v-if="structure.representation === 'cellSites'" class="note">{{ t('panel.latticeLocked') }}</p>
+      <KnowledgeHint id="centering" />
       <label class="check"><input v-model="ui.colorByKind" type="checkbox" /> {{ t('panel.colorByKind') }}</label>
       <ul v-if="ui.colorByKind" class="legend">
         <li v-for="item in legend" :key="item.kind">
@@ -557,12 +606,75 @@ function addRule() {
         <ul v-if="conflictText.length" class="warnings">
           <li v-for="(w, i) in conflictText" :key="i">{{ w }}</li>
         </ul>
+        <KnowledgeHint id="coordination" />
       </template>
       <p v-else class="todo">{{ t('panel.readonly') }}</p>
     </PanelCard>
 
-    <PanelCard :index="num('direction')" term="direction" icon="direction" accent="rose">
-      <p class="todo">{{ t('panel.directionTodo') }}</p>
+    <PanelCard data-tour="direction" :index="num('direction')" term="direction" icon="direction" accent="rose">
+      <label class="check"><input v-model="structure.directionEnabled" type="checkbox" /> {{ t('panel.dirShow') }}</label>
+      <div class="idx-row">
+        <label>[uvw]</label>
+        <input v-model.number="structure.direction.u" type="number" step="1" aria-label="u" />
+        <input v-model.number="structure.direction.v" type="number" step="1" aria-label="v" />
+        <input v-model.number="structure.direction.w" type="number" step="1" aria-label="w" />
+      </div>
+      <p v-if="!dirValidation.valid" class="error" role="alert">{{ t('panel.invalid', { reason: dirValidation.reason }) }}</p>
+      <p v-else class="note mono">{{ dirText }}<span v-if="dirFourIndex">　{{ t('panel.fourIndex', { text: dirFourIndex }) }}</span></p>
+      <div class="presets">
+        <button v-for="p in DIRECTION_PRESETS" :key="p.join()" class="small" @click="setDirection(...p)">{{ formatIndices(...p) }}</button>
+      </div>
+      <div class="idx-row">
+        <label>{{ t('panel.origin') }}</label>
+        <input v-model.number="structure.direction.origin[0]" type="number" step="0.25" aria-label="x" />
+        <input v-model.number="structure.direction.origin[1]" type="number" step="0.25" aria-label="y" />
+        <input v-model.number="structure.direction.origin[2]" type="number" step="0.25" aria-label="z" />
+      </div>
+      <div class="param-row wide">
+        <label for="dir-length">{{ t('panel.length') }}</label>
+        <input id="dir-length" v-model.number="structure.direction.displayLength" type="range" min="0.25" max="3" step="0.25" />
+        <output>{{ structure.direction.displayLength.toFixed(2) }}×</output>
+      </div>
+      <button class="small" :disabled="!dirValidation.valid" @click="viewAlong">{{ t('panel.viewAlong') }}</button>
+      <p class="note">{{ t('panel.dirNote') }}</p>
+      <KnowledgeHint id="direction" />
+    </PanelCard>
+
+    <PanelCard data-tour="plane" :index="num('plane')" term="plane" icon="plane" accent="rose">
+      <label class="check" :class="{ disabled: prismLocks }"><input v-model="structure.planeEnabled" type="checkbox" :disabled="prismLocks" /> {{ t('panel.planeShow') }}</label>
+      <div class="idx-row">
+        <label>(hkl)</label>
+        <input v-model.number="structure.plane.h" type="number" step="1" aria-label="h" />
+        <input v-model.number="structure.plane.k" type="number" step="1" aria-label="k" />
+        <input v-model.number="structure.plane.l" type="number" step="1" aria-label="l" />
+      </div>
+      <p v-if="!planeValidation.valid" class="error" role="alert">{{ t('panel.invalid', { reason: planeValidation.reason }) }}</p>
+      <template v-else>
+        <p class="note mono">{{ planeText }}<span v-if="planeFourIndex">　{{ t('panel.fourIndex', { text: planeFourIndex }) }}</span>　·　{{ t('panel.spacing', { d: `${planeSpacing.toFixed(4)}${unit}` }) }}</p>
+        <p v-if="structure.planeEnabled && !planeHasSection" class="error" role="alert">{{ t('panel.noIntersection') }}</p>
+      </template>
+      <div class="presets">
+        <button v-for="p in PLANE_PRESETS" :key="p.join()" class="small" @click="setPlane(...p)">{{ formatMiller(...p) }}</button>
+      </div>
+      <div class="param-row wide">
+        <label for="plane-m">{{ t('panel.planeOrder') }}</label>
+        <input id="plane-m" v-model.number="structure.plane.m" type="range" min="-3" max="6" step="1" />
+        <output>{{ structure.plane.m }}</output>
+      </div>
+      <div class="param-row wide">
+        <label for="plane-shift">{{ t('panel.planeShift') }}</label>
+        <input id="plane-shift" v-model.number="structure.plane.shift" type="range" :min="-planeSpacing || -1" :max="planeSpacing || 1" :step="(planeSpacing || 1) / 20" />
+        <output>{{ structure.plane.shift.toFixed(3) }}</output>
+      </div>
+      <div class="param-row wide">
+        <label for="plane-opacity">{{ t('panel.planeOpacity') }}</label>
+        <input id="plane-opacity" v-model.number="structure.plane.opacity" type="range" min="0.1" max="0.9" step="0.05" />
+        <output>{{ Math.round(structure.plane.opacity * 100) }}%</output>
+      </div>
+      <label class="check"><input v-model="structure.plane.clip" type="checkbox" /> {{ t('panel.planeClip') }}</label>
+      <p class="note">{{ t('panel.planeOrderNote') }} {{ t('panel.planeNote') }}</p>
+      <KnowledgeHint id="miller" />
+      <KnowledgeHint id="reciprocal" />
     </PanelCard>
 
     <PanelCard :index="num('display')" term="display" icon="display" accent="sky">
@@ -959,5 +1071,33 @@ function addRule() {
 }
 .param-row.wide {
   grid-template-columns: 7em 1fr 3.5em;
+}
+.idx-row {
+  display: grid;
+  grid-template-columns: 4.5em repeat(3, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  font-size: 0.86rem;
+  color: var(--text-2);
+}
+.idx-row input {
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+.idx-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.mono {
+  font-variant-numeric: tabular-nums;
 }
 </style>

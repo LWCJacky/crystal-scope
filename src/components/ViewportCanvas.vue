@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { directionVector, validateIndices } from '../core/direction'
+import { planePolygon, validateMiller } from '../core/plane'
 import { pieceCentroidAngle, pieceCount, pieceOutline, pieceSolid } from '../core/assembly'
 import { demoState } from '../core/demo'
 import { cellAngleMarks, formatDegrees } from '../core/angles'
@@ -23,17 +24,18 @@ import { useReducedMotion } from '../composables/useReducedMotion'
 import { useI18n } from '../i18n'
 import { bootFail, bootReady, bootReport } from '../boot/report'
 import {
-  type AtomInfo,
   CrystalRenderer,
-  type LadderStageScene,
   LADDER_VIEW_DIR,
-  type PickResult,
+  type AtomInfo,
+  type LadderStageScene,
   type MacroObject,
+  type PickResult,
   type SceneAtom,
   type SceneAxis,
   type SceneData,
   type SceneLabel,
   type ScenePiece,
+  type ScenePlane,
 } from '../render/CrystalRenderer'
 import { useStructureStore } from '../stores/structure'
 import { useUiStore, type ViewMode } from '../stores/ui'
@@ -50,6 +52,8 @@ const AXIS_COLORS = ['#d94848', '#3c9a4a', '#3b6fd1']
 const HEX_A_COLOR = '#e0458a'
 const HEX_C_COLOR = '#c0392b'
 const HABIT_COLOR = '#e3b23c'
+/** 晶面截面的顏色（與晶向箭頭的琥珀色、晶軸的三色區分）。 */
+const PLANE_COLOR = '#ff7eb6'
 /** 夾角弧線與文字（與 120° 標示共用）。 */
 const ANGLE_LINE_COLOR = '#5b6cf0'
 const ANGLE_TEXT_COLOR = '#8f9cff'
@@ -234,6 +238,14 @@ function buildScene(over?: SceneOverrides): SceneData {
     const v = directionVector(basis, d.u, d.v, d.w)
     arrow = { origin: toCart(d.origin), vector: v.map((x) => x * d.displayLength) as Vec3 }
   }
+  // 晶面：與展示區（或外擴一個晶胞）多面體的截面；視覺切面，不刪除原子
+  const planes: ScenePlane[] = []
+  const pl = structure.plane
+  if (!over && !prism && structure.planeEnabled && validateMiller(pl.h, pl.k, pl.l).valid) {
+    const margin = pl.clip ? 0 : 1
+    const pts = planePolygon(basis, pl.h, pl.k, pl.l, pl.m, pl.shift, { min: [-margin, -margin, -margin], max: corner.map((n) => n + margin) as Vec3 })
+    if (pts.length >= 3) planes.push({ points: pts, color: PLANE_COLOR, opacity: pl.opacity })
+  }
 
   const repeat = { repeatA: corner[0], repeatB: corner[1], repeatC: corner[2], showBoundaryImages: false }
   const toCartPair = ([p, q]: [Vec3, Vec3]): [Vec3, Vec3] => [toCart(p), toCart(q)]
@@ -325,6 +337,7 @@ function buildScene(over?: SceneOverrides): SceneData {
     polyhedron: habit,
     center: prism ? toCart([0, 0, layers() / 2]) : toCart(corner.map((n) => n / 2) as Vec3),
     arrow,
+    planes,
     bonds,
     bondRadius: 0.02 * minLen,
     links,
@@ -866,6 +879,10 @@ onMounted(() => {
   watch(
     () => ui.pngRequest,
     (req) => req && exportPng(req.legend),
+  )
+  watch(
+    () => ui.viewAlongRequest,
+    (req) => req && renderer?.viewAlong(req.vector, reducedMotion.value),
   )
   watch(
     () => ui.projection,

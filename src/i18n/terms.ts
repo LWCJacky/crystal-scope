@@ -22,6 +22,7 @@ export const TERMS = {
   repeat: { en: 'Repeat', 'zh-TW': '週期排列', ja: '周期配列' },
   atomPosition: { en: 'Fractional x, y, z', 'zh-TW': '原子位置', ja: '原子位置' },
   direction: { en: 'Direction [uvw]', 'zh-TW': '晶向', ja: '結晶方位' },
+  plane: { en: 'Plane (hkl)', 'zh-TW': '晶面', ja: '格子面' },
   display: { en: 'Display', 'zh-TW': '顯示', ja: '表示' },
   stats: { en: 'Statistics', 'zh-TW': '統計', ja: '統計' },
   settings: { en: 'Settings', 'zh-TW': '設定', ja: '設定' },

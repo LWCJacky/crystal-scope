@@ -93,6 +93,9 @@ export const useStructureStore = defineStore('structure', () => {
   })
   const direction = ref<Direction>({ u: 1, v: 1, w: 1, origin: [0, 0, 0], displayLength: 1 })
   const directionEnabled = ref(false)
+  /** 晶面 (hkl)：序號 m（h x + k y + l z = m）與沿法向的物理平移分開；clip=false 時延伸一個晶胞。 */
+  const plane = ref({ h: 1, k: 1, l: 1, m: 1, shift: 0, opacity: 0.35, clip: true })
+  const planeEnabled = ref(false)
   const selectedAtomId = ref<string | null>(null)
 
   const history = new EditHistory<Snapshot>()
@@ -501,6 +504,8 @@ export const useStructureStore = defineStore('structure', () => {
     repeat,
     direction,
     directionEnabled,
+    plane,
+    planeEnabled,
     selectedAtomId,
     source,
     cellValidation,

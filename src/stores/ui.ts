@@ -38,6 +38,11 @@ export const useUiStore = defineStore('ui', () => {
   function requestPng(legend: boolean) {
     pngRequest.value = { id: Date.now(), legend }
   }
+  /** 沿晶向觀看：以直角座標向量請求相機轉向（檢視區監看）。 */
+  const viewAlongRequest = ref<{ id: number; vector: [number, number, number] } | null>(null)
+  function requestViewAlong(vector: [number, number, number]) {
+    viewAlongRequest.value = { id: Date.now(), vector }
+  }
   const viewMode = ref<ViewMode>('structure')
   /** 依晶格點類型（角落／底心／體心／面心）著色；關閉時依元素著色。 */
   const colorByKind = ref(true)
@@ -118,6 +123,8 @@ export const useUiStore = defineStore('ui', () => {
     pngRequest,
     pngLegend,
     requestPng,
+    viewAlongRequest,
+    requestViewAlong,
     viewMode,
     colorByKind,
     showAssociation,

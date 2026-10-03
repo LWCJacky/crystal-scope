@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 各模組的線條圖示（自繪，24×24 網格、1.8 線寬）。 */
-defineProps<{ name: 'motif' | 'lattice' | 'sphere' | 'hex' | 'param' | 'cell' | 'repeat' | 'atom' | 'direction' | 'display' | 'play' | 'more' | 'stats' | 'crystal' }>()
+defineProps<{ name: 'motif' | 'lattice' | 'sphere' | 'hex' | 'param' | 'cell' | 'repeat' | 'atom' | 'direction' | 'display' | 'play' | 'more' | 'stats' | 'plane' | 'crystal' }>()
 </script>
 
 <template>
@@ -62,6 +62,11 @@ defineProps<{ name: 'motif' | 'lattice' | 'sphere' | 'hex' | 'param' | 'cell' | 
     <!-- 播放 -->
     <template v-else-if="name === 'play'">
       <path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none" />
+    </template>
+    <!-- 晶面：斜切的平面 -->
+    <template v-else-if="name === 'plane'">
+      <path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5z" opacity="0.5" />
+      <path d="M5 13.5 15 6.5l4 2.5-10 7z" fill="currentColor" fill-opacity="0.35" />
     </template>
     <!-- 統計：長條圖 -->
     <template v-else-if="name === 'stats'">
