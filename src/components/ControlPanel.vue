@@ -977,6 +977,18 @@ function addRule() {
   font-size: 0.84rem;
   color: var(--muted);
 }
+/* 隱藏的檔案選擇器：只透過「匯入 JSON」按鈕觸發，視覺上不佔位 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .copy-row {
   display: flex;
   flex-wrap: wrap;
