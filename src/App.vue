@@ -8,6 +8,7 @@ import ModuleIcon from './components/icons/ModuleIcon.vue'
 import SystemList from './components/SystemList.vue'
 import ViewportCanvas from './components/ViewportCanvas.vue'
 import { useDemoClock } from './composables/useDemoClock'
+import { useReducedMotion } from './composables/useReducedMotion'
 import { MOBILE_QUERY, useMediaQuery } from './composables/useMediaQuery'
 import { afterBoot } from './boot/report'
 import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
@@ -17,6 +18,7 @@ import { useUiStore } from './stores/ui'
 
 const ui = useUiStore()
 const { t, locale } = useI18n()
+const reducedMotion = useReducedMotion()
 useDemoClock()
 
 /** 手機版面：側欄與播放列改為底部分頁＋可滑出的面板；桌面維持三欄。 */
@@ -30,6 +32,36 @@ const TABS = [
 
 function toggleSheet(id: (typeof TABS)[number]['id']) {
   ui.sheet = ui.sheet === id ? null : id
+}
+
+/**
+ * 面板內容切換（iOS 風格）：新內容從被點分頁的那一側滑入、舊內容往反方向滑出（out-in），
+ * 面板高度以 WAAPI 從舊高度滑到新高度；KeepAlive 保留各面板的元件狀態。
+ */
+const PANES = { examples: SystemList, demo: AnimationBar, controls: ControlPanel, more: HeaderActions } as const
+const PANE_CLASS: Record<keyof typeof PANES, string> = { examples: 'panel', demo: 'sheet-bar', controls: 'panel', more: '' }
+const paneDir = ref<'forward' | 'back'>('forward')
+let lastPaneIndex = 0
+watch(
+  () => ui.sheet,
+  (s) => {
+    if (!s) return
+    const i = TABS.findIndex((tab) => tab.id === s)
+    paneDir.value = i >= lastPaneIndex ? 'forward' : 'back'
+    lastPaneIndex = i
+  },
+)
+let sheetHeightBefore = 0
+function onPaneBeforeLeave() {
+  sheetHeightBefore = sheetEl.value?.offsetHeight ?? 0
+}
+function onPaneEnter() {
+  const el = sheetEl.value
+  if (!el || !sheetHeightBefore || reducedMotion.value) return
+  const h1 = el.offsetHeight
+  if (Math.abs(h1 - sheetHeightBefore) < 2) return
+  // 高度屬於版面屬性，但面板只有一個元素且每次切換一次，可接受；曲線用畫面上移動的 ease-in-out
+  el.animate([{ height: `${sheetHeightBefore}px` }, { height: `${h1}px` }], { duration: 240, easing: 'cubic-bezier(0.77, 0, 0.175, 1)' })
 }
 
 // 離開手機版面時收合面板
@@ -141,11 +173,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         >
           <span />
         </button>
-        <div class="sheet-body">
-          <SystemList v-show="ui.sheet === 'examples'" class="panel" />
-          <AnimationBar v-show="ui.sheet === 'demo'" class="sheet-bar" />
-          <ControlPanel v-show="ui.sheet === 'controls'" class="panel" />
-          <HeaderActions v-show="ui.sheet === 'more'" stack />
+        <div class="sheet-body" :class="paneDir">
+          <Transition name="pane" mode="out-in" @before-leave="onPaneBeforeLeave" @enter="onPaneEnter">
+            <KeepAlive>
+              <component :is="PANES[ui.sheet]" v-if="ui.sheet" :key="ui.sheet" :class="PANE_CLASS[ui.sheet]" :stack="ui.sheet === 'more' || undefined" />
+            </KeepAlive>
+          </Transition>
         </div>
       </section>
       <nav class="tabbar area-bottom" :aria-label="t('header.mode')">
@@ -254,6 +287,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .tab svg {
   width: 22px;
   height: 22px;
+  /* 選中時圖示微微上浮放大（iOS 符號效果的簡化版）；transition 可被連點重設 */
+  transition: transform 160ms var(--ease-out);
+}
+.tab[aria-pressed='true'] svg {
+  transform: translateY(-1px) scale(1.12);
 }
 .tab[aria-pressed='true'] {
   background: transparent;
@@ -296,6 +334,34 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   transform: translateY(calc(100% + 60px));
   transition: transform 280ms var(--ease-drawer);
   will-change: transform;
+  overflow: hidden;
+}
+/* 面板內容切換：進場 200 ms、退場 120 ms，方向依分頁順序；只動 opacity／transform */
+.pane-enter-active {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+.pane-leave-active {
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.pane-enter-from,
+.pane-leave-to {
+  opacity: 0;
+}
+.forward .pane-enter-from {
+  transform: translateX(28px);
+}
+.forward .pane-leave-to {
+  transform: translateX(-28px);
+}
+.back .pane-enter-from {
+  transform: translateX(-28px);
+}
+.back .pane-leave-to {
+  transform: translateX(28px);
 }
 .sheet.open {
   transform: translateY(0);
@@ -347,6 +413,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   padding-bottom: 18px;
 }
 @media (prefers-reduced-motion: reduce) {
+  .forward .pane-enter-from,
+  .forward .pane-leave-to,
+  .back .pane-enter-from,
+  .back .pane-leave-to,
+  .tab[aria-pressed='true'] svg {
+    transform: none;
+  }
   .sheet {
     transition: opacity 200ms var(--ease-out);
     opacity: 0;
