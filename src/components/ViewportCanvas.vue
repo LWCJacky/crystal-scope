@@ -955,7 +955,7 @@ onBeforeUnmount(() => {
       :color="hoverColor"
     />
     <!-- 視角方塊：桌面、非尺度之旅時 -->
-    <ViewCube v-if="rendererRef && !isMobile && !ui.ladderOn && !ui.contextLost" :renderer="rendererRef" :tick="renderTick" @home="resetView" />
+    <ViewCube v-if="rendererRef && !isMobile && !ui.ladderOn && !ui.contextLost" :renderer="rendererRef" :tick="renderTick" @interact="ui.autoRotating = false" @home="resetView" />
     <AtomCard :info="focused?.atom.info ?? null" docked :x="0" :y="0" :radius="0" side="right" :color="focusColor" @close="unfocusAtom" />
     <!-- 尺度之旅的比例尺：長度隨放大連續變化，是整段動畫的教學核心 -->
     <Transition name="fade">

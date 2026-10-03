@@ -12,6 +12,8 @@ import { useI18n } from '../i18n'
  * 自己有一個 96 px 的小場景，只在主畫面重繪或懸停變化時重繪。
  */
 const props = defineProps<{ renderer: CrystalRenderer; tick: number }>()
+/** 使用者一碰方塊（按下、箭頭、回預設）就通知父層停止自轉，避免自轉與對位補間互相拉扯。 */
+const emit = defineEmits<{ interact: []; home: [] }>()
 const { t } = useI18n()
 const reduced = useReducedMotion()
 
@@ -156,11 +158,21 @@ function onLeave() {
   setHighlight(null)
   sync()
 }
+function onDown() {
+  emit('interact')
+}
 function onClick(e: PointerEvent) {
   const d = pick(e)
   if (d) props.renderer.viewFrom(d, reduced.value)
 }
-const rotate = (axis: 'horizontal' | 'vertical', sign: 1 | -1) => props.renderer.rotateView(axis, sign, reduced.value)
+const rotate = (axis: 'horizontal' | 'vertical', sign: 1 | -1) => {
+  emit('interact')
+  props.renderer.rotateView(axis, sign, reduced.value)
+}
+function home() {
+  emit('interact')
+  emit('home')
+}
 
 onMounted(() => {
   gl = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -189,8 +201,8 @@ onBeforeUnmount(() => {
     <button class="arrow down" :title="t('viewcube.down')" :aria-label="t('viewcube.down')" @click="rotate('vertical', -1)">▼</button>
     <button class="arrow left" :title="t('viewcube.left')" :aria-label="t('viewcube.left')" @click="rotate('horizontal', -1)">◀</button>
     <button class="arrow right" :title="t('viewcube.right')" :aria-label="t('viewcube.right')" @click="rotate('horizontal', 1)">▶</button>
-    <button class="arrow home" :title="t('viewcube.home')" :aria-label="t('viewcube.home')" @click="$emit('home')">⌂</button>
-    <div ref="host" class="cube" :title="hoverLabel" @pointermove="onMove" @pointerleave="onLeave" @pointerup="onClick" />
+    <button class="arrow home" :title="t('viewcube.home')" :aria-label="t('viewcube.home')" @click="home">⌂</button>
+    <div ref="host" class="cube" :title="hoverLabel" @pointerdown="onDown" @pointermove="onMove" @pointerleave="onLeave" @pointerup="onClick" />
     <span class="label" :class="{ on: hoverLabel }" aria-live="polite">{{ hoverLabel }}</span>
   </div>
 </template>
