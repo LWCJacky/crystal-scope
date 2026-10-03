@@ -299,8 +299,8 @@ function view(i: number) {
 }
 .inner {
   padding: 18px 20px 20px;
-  overflow-y: auto;
-  max-height: calc(100dvh - 32px);
+}
+.assign {
   overscroll-behavior: contain;
 }
 header {

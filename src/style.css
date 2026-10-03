@@ -81,6 +81,27 @@
 }
 
 /* 手機基線：不畫系統的點按高亮、橫向不放大字、不觸發整頁的下拉更新／橡皮筋 */
+/* 捲軸：細、沿用邊框色、透明軌道；Firefox 與 WebKit 各自的屬性 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--border-strong);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
 html {
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
