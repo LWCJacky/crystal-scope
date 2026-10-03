@@ -27,7 +27,7 @@ const scene = new THREE.Scene()
 const camera = new THREE.OrthographicCamera(-0.95, 0.95, 0.95, -0.95, 0.1, 10)
 camera.position.set(0, 0, 5)
 const cube = new THREE.Group()
-const faceMaterials: THREE.MeshBasicMaterial[] = []
+const faceMaterials: THREE.MeshStandardMaterial[] = []
 const raycaster = new THREE.Raycaster()
 let mesh: THREE.Mesh | null = null
 
@@ -40,37 +40,42 @@ const hoverLabel = computed(() => {
   return t('viewcube.viewFrom', { dir: parts.join(' ') })
 })
 
+/** 面貼圖：256 px、縱向微漸層、細的軸色邊框、粗體字＋細陰影；高解析加 mipmap 與各向異性，縮小時不糊。 */
 function faceTexture(axis: number, sign: number, highlight: boolean): THREE.CanvasTexture {
-  const px = 128
+  const px = 256
   const c = document.createElement('canvas')
   c.width = c.height = px
   const ctx = c.getContext('2d')!
   const css = getComputedStyle(document.documentElement)
-  const surface = css.getPropertyValue('--surface').trim() || '#141821'
-  const text = css.getPropertyValue('--text-2').trim() || '#c3c8d4'
+  const text = css.getPropertyValue('--text').trim() || '#eceef3'
   const accent = css.getPropertyValue('--violet').trim() || '#a596ff'
-  ctx.fillStyle = surface
+  const grad = ctx.createLinearGradient(0, 0, 0, px)
+  grad.addColorStop(0, highlight ? '#514596' : '#353d52')
+  grad.addColorStop(1, highlight ? '#3a3072' : '#242a3a')
+  ctx.fillStyle = grad
   ctx.fillRect(0, 0, px, px)
-  if (highlight) {
-    ctx.fillStyle = accent
-    ctx.globalAlpha = 0.28
-    ctx.fillRect(0, 0, px, px)
-    ctx.globalAlpha = 1
-  }
-  // 邊框：該軸的顏色（a 紅、b 綠、c 藍）
+  // 邊框：該軸的顏色（a 紅、b 綠、c 藍），細、略內縮
   ctx.strokeStyle = AXIS_COLORS[axis]
-  ctx.lineWidth = 10
-  ctx.strokeRect(5, 5, px - 10, px - 10)
-  ctx.fillStyle = highlight ? accent : text
-  ctx.font = `800 ${sign > 0 ? 56 : 48}px ${getComputedStyle(document.body).fontFamily}`
+  ctx.lineWidth = 12
+  ctx.strokeRect(6, 6, px - 12, px - 12)
+  ctx.globalAlpha = 1
+  ctx.fillStyle = highlight ? '#ffffff' : text
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+  ctx.shadowBlur = 6
+  ctx.shadowOffsetY = 2
+  ctx.font = `800 ${sign > 0 ? 112 : 96}px ${getComputedStyle(document.body).fontFamily}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  void accent
   // BoxGeometry 各面的 UV 方向不同：旋轉文字，讓從外側看、世界 z 朝上（±z 面以 +y 朝上）時字是正的
   ctx.translate(px / 2, px / 2 + 2)
   ctx.rotate(FACE_TEXT_ROTATION[axis * 2 + (sign > 0 ? 0 : 1)])
   ctx.fillText(`${sign > 0 ? '' : '−'}${AXIS_NAMES[axis]}`, 0, 0)
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = gl?.capabilities.getMaxAnisotropy() ?? 1
+  tex.minFilter = THREE.LinearMipmapLinearFilter
+  tex.magFilter = THREE.LinearFilter
   return tex
 }
 
@@ -82,10 +87,17 @@ const FACE_ORDER: [number, number][] = [[0, 1], [0, -1], [1, 1], [1, -1], [2, 1]
 
 function buildCube() {
   const geometry = new THREE.BoxGeometry(1, 1, 1)
-  for (const [axis, sign] of FACE_ORDER) faceMaterials.push(new THREE.MeshBasicMaterial({ map: faceTexture(axis, sign, false) }))
+  for (const [axis, sign] of FACE_ORDER) faceMaterials.push(new THREE.MeshStandardMaterial({ map: faceTexture(axis, sign, false), roughness: 0.85, metalness: 0 }))
   mesh = new THREE.Mesh(geometry, faceMaterials)
   cube.add(mesh)
+  // 深色稜線：讓三個面的交界清楚
+  cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color: 0x0a0d13, transparent: true, opacity: 0.45 })))
   scene.add(cube)
+  // 光照固定在小場景裡：方塊轉動時三個面明暗不同，才讀得出是立方體
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x404a60, 1.6))
+  const key = new THREE.DirectionalLight(0xffffff, 1.4)
+  key.position.set(1.2, 1.6, 2.2)
+  scene.add(key)
 }
 
 function setHighlight(dir: Vec3 | null) {
@@ -152,7 +164,7 @@ const rotate = (axis: 'horizontal' | 'vertical', sign: 1 | -1) => props.renderer
 
 onMounted(() => {
   gl = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-  gl.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  gl.setPixelRatio(Math.min(window.devicePixelRatio, 3))
   gl.setSize(SIZE, SIZE, false)
   gl.domElement.style.width = gl.domElement.style.height = `${SIZE}px`
   host.value!.appendChild(gl.domElement)
