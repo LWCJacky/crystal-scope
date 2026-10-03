@@ -21,9 +21,7 @@ function open(which: 'student' | 'teacher' = assignment.mode === 'teacher' ? 'te
 function close() {
   dialog.value?.close()
 }
-function onBackdrop(e: MouseEvent) {
-  if (e.target === dialog.value) close()
-}
+/** 有表單的對話框不以「點暗幕」關閉：密碼管理器的彈出選單、拖曳選字放開在外面都會誤觸。只用 ✕ 或 Esc。 */
 defineExpose({ open })
 
 const fmtTime = (iso: string) => (iso ? new Date(iso).toLocaleString(undefined, { hour12: false }) : '')
@@ -80,11 +78,16 @@ const startExampleName = computed(() => {
 
 // ───────── 老師 ─────────
 const form = ref({ title: '', instructions: '', startExample: structure.exampleId as string | null, lockExamples: true, requireStudentId: true, requireName: true, password: '', password2: '' })
+/** 密碼管理器自動填入不一定會送 input 事件：送出時以欄位實際值為準。 */
+const pwInput = ref<HTMLInputElement>()
+const pwInput2 = ref<HTMLInputElement>()
 const teacherError = ref<string | null>(null)
 const created = ref<AssignmentFile | null>(null)
 const busy = ref(false)
 async function create() {
   teacherError.value = null
+  form.value.password = pwInput.value?.value ?? form.value.password
+  form.value.password2 = pwInput2.value?.value ?? form.value.password2
   if (!form.value.title.trim()) return (teacherError.value = t('assign.needTitle'))
   if (form.value.password.length < 8) return (teacherError.value = t('assign.weakPassword'))
   if (form.value.password !== form.value.password2) return (teacherError.value = t('assign.passwordMismatch'))
@@ -94,11 +97,13 @@ async function create() {
       { title: form.value.title.trim(), instructions: form.value.instructions.trim(), startExample: form.value.startExample, lockExamples: form.value.lockExamples, requireStudentId: form.value.requireStudentId, requireName: form.value.requireName },
       form.value.password,
     )
+    form.value.password = form.value.password2 = ''
   } finally {
     busy.value = false
   }
 }
 const keyPassword = ref('')
+const keyUnlockInput = ref<HTMLInputElement>()
 const keyFileJson = ref<unknown>(null)
 const keyFileName = ref('')
 const gradeError = ref<string | null>(null)
@@ -117,7 +122,7 @@ async function onKeyFile(e: Event) {
 async function unlock() {
   gradeError.value = null
   if (!keyFileJson.value) return (gradeError.value = t('assign.needKeyFile'))
-  const err = await assignment.loadTeacherKeys(keyFileJson.value, keyPassword.value)
+  const err = await assignment.loadTeacherKeys(keyFileJson.value, keyUnlockInput.value?.value ?? keyPassword.value)
   if (err) gradeError.value = t('assign.fileError', { reason: err })
   keyPassword.value = ''
 }
@@ -140,7 +145,7 @@ function view(i: number) {
 </script>
 
 <template>
-  <dialog ref="dialog" class="assign" aria-labelledby="assign-title" @click="onBackdrop">
+  <dialog ref="dialog" class="assign" aria-labelledby="assign-title">
     <div class="inner">
       <header>
         <div class="head-title">
@@ -221,8 +226,8 @@ function view(i: number) {
         <label class="check"><input v-model="form.lockExamples" type="checkbox" /> {{ t('assign.formLock') }}</label>
         <label class="check"><input v-model="form.requireStudentId" type="checkbox" /> {{ t('assign.formReqId') }}</label>
         <label class="check"><input v-model="form.requireName" type="checkbox" /> {{ t('assign.formReqName') }}</label>
-        <label class="field"><span>{{ t('assign.keyPassword') }}</span><input v-model="form.password" type="password" autocomplete="new-password" /></label>
-        <label class="field"><span>{{ t('assign.keyPassword2') }}</span><input v-model="form.password2" type="password" autocomplete="new-password" /></label>
+        <label class="field"><span>{{ t('assign.keyPassword') }}</span><input ref="pwInput" v-model="form.password" type="password" autocomplete="new-password" /></label>
+        <label class="field"><span>{{ t('assign.keyPassword2') }}</span><input ref="pwInput2" v-model="form.password2" type="password" autocomplete="new-password" /></label>
         <p class="note">{{ t('assign.keyNote', { a: ASSIGNMENT_EXT, k: TEACHER_KEY_EXT }) }}</p>
         <p v-if="teacherError" class="error" role="alert">{{ teacherError }}</p>
         <div class="actions">
@@ -237,7 +242,7 @@ function view(i: number) {
             <input type="file" :accept="TEACHER_KEY_EXT + ',.json'" class="sr-only" @change="onKeyFile" />
             <span class="btn">{{ keyFileName || t('assign.chooseKey') }}</span>
           </label>
-          <label class="field"><span>{{ t('assign.keyPassword') }}</span><input v-model="keyPassword" type="password" autocomplete="current-password" @keydown.enter.prevent="unlock" /></label>
+          <label class="field"><span>{{ t('assign.keyPassword') }}</span><input ref="keyUnlockInput" v-model="keyPassword" type="password" autocomplete="current-password" @keydown.enter.prevent="unlock" /></label>
           <p v-if="gradeError" class="error" role="alert">{{ gradeError }}</p>
           <div class="actions"><button class="primary" @click="unlock">{{ t('assign.unlock') }}</button></div>
         </template>
