@@ -14,6 +14,8 @@ npm run build   # 型別檢查 + 靜態建置
 BASE_PATH=/crystal-scope/ npm run build   # GitHub Pages 子路徑
 ```
 
+相依套件的已知漏洞修補紀錄見 [`docs/SECURITY_UPDATES.md`](docs/SECURITY_UPDATES.md)。
+
 ## 線上版本
 
 GitHub Pages：<https://lwcjacky.com/crystal-scope/>（`lwcjacky.github.io/crystal-scope/` 會轉址到此）

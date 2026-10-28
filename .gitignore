@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# SentinelOps 掃描報告（自動產生、含本機路徑；修補紀錄見 docs/SECURITY_UPDATES.md）
+SECURITY-REPORT.md
